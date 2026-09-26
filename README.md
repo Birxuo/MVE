@@ -1,7 +1,6 @@
 # MVE
-Morocco Verifiable Elections
 
-# Morocco Verifiable Elections
+## Morocco Verifiable Elections
 ### A research project for building a secure, transparent, auditable and voter-verifiable digital election infrastructure for Morocco.
 [![Status](https://img.shields.io/badge/status-research%20%2F%20prototype-orange)](#project-status)
 [![License](https://img.shields.io/badge/license-personal%20%26%20non--commercial-blue)](#license)
