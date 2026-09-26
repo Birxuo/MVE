@@ -1,0 +1,28 @@
+{
+  "name": "mve-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Morocco Verifiable Elections — research prototype (NOT for real elections)",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "audit": "npm audit --omit=dev",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "simulate": "npm run build && node dist/research/simulations/simulate.js",
+    "simulate:100": "npm run build && node dist/research/simulations/simulate.js --stations 100 --voters 200",
+    "simulate:1000": "npm run build && node dist/research/simulations/simulate.js --stations 1000 --voters 50",
+    "failures": "npm run build && node dist/research/simulations/failures.js",
+    "recover": "npm run build && node dist/research/simulations/recover.js",
+    "manage": "npm run build && node dist/services/election-core/src/cli.js",
+    "transparency": "npm run build && node dist/services/transparency/src/cli.js",
+    "incidents": "npm run build && node dist/services/incidents/src/cli.js",
+    "station": "npm run build && node dist/voting/client/src/cli.js",
+    "verify-paper": "npm run build && node dist/voting/verification/src/check.js",
+    "lint:privacy": "node scripts/check-privacy.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

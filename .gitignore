@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# MVE local simulation data (5 JSON stores) — never commit
+data/
+*.sim.csv

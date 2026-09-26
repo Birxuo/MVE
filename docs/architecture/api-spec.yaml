@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: MVE Transparency API V1
+  version: 0.1.0
+paths:
+  /api/elections:
+    get:
+      summary: List elections
+      responses: {'200': {description: OK}}
+  /api/elections/{id}:
+    get:
+      summary: Election detail
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: OK}}
+  /api/districts:
+    get:
+      summary: List districts
+      responses: {'200': {description: OK}}
+  /api/polling-stations:
+    get:
+      summary: List stations
+      responses: {'200': {description: OK}}
+  /api/results:
+    get:
+      summary: Station results + hashes + signatures
+      responses: {'200': {description: OK}}
+  /api/audits:
+    get:
+      summary: Audit status per station
+      responses: {'200': {description: OK}}
+  /api/incidents:
+    get:
+      summary: Published incidents (no PII)
+      responses: {'200': {description: OK}}
+  /api/verification:
+    get:
+      summary: Verify result hash/signature
+      responses: {'200': {description: OK}}

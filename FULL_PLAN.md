@@ -1,3 +1,9 @@
+# Full Plan – Morocco Verifiable Elections
+
+> Source: renamed from `b` (original vision doc, 52 sections). Body preserved verbatim below.
+
+---
+
 Yes. If the objective is to modernize Morocco’s elections and reduce opportunities for fraud, vote-buying, intimidation, ballot manipulation, and opaque counting, I would not start by simply replacing paper ballots with an app.
 
 I would design a verifiable national election infrastructure where digital technology makes manipulation harder while preserving a voter-verifiable paper audit trail.
