@@ -1,10 +1,5 @@
 # MVE
 Morocco Verifiable Elections
-Absolutely. For this project, I’d make the README look like a serious civic-technology/security research project, not like a generic CRUD election app.
-
-GitHub recommends a README that clearly explains what the project does, how to get started, how to get help, and who maintains it. 
-
-Below is a complete README.md you can put at the root of the repository.
 
 # Morocco Verifiable Elections
 ### A research project for building a secure, transparent, auditable and voter-verifiable digital election infrastructure for Morocco.
