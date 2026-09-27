@@ -38,6 +38,9 @@ npm run station -- close --station X --approvals presiding,deputy,observer [--en
 npm run verify-paper [--station X] [--sample N] [--ceremony HEX]   # paper↔electronic↔published recount
 npm run manage -- officer-keygen --officer OFF-1 --station X       # officer key (SIM ONLY: privkey printed once)
 npm run manage -- officer-sign --key off.pem --hash DIGEST         # endorse tally digest from close refusal
+npm run manage -- ceremony --custodians A,B --observer C --key-out ca.pem   # witnessed root key
+npm run manage -- ca-sign-device --station X --key ca.pem          # certify station binding
+npm run manage -- revoke-device --device M-001 --reason "..."      # revocation (verify paths go INVALID)
 npm run transmission -- terminal-init --national national
 npm run transmission -- export --station X --terminal-pub terminal.pub.pem --out X.mvepkg
 npm run transmission -- import --file X.mvepkg --national national

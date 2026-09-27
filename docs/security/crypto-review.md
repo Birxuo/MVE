@@ -19,7 +19,12 @@ DEFERRED = consciously postponed per FULL_PLAN.md.
 
 ## Gaps (must not be misrepresented)
 
-1. **Ephemeral device keys.** `generateDeviceKeys` creates keys in-memory per run; no certificate chain, no HSM/TPM, no key ceremony (FULL_PLAN §5). GAP — `verify --pubkey` only works when the operator persists the key out-of-band.
+1. **Ephemeral device keys → CA-backed (PARTIALLY CLOSED).** `manage ceremony`
+   generates a witnessed election root (custodians + observer + image hash in
+   `ca/ca.json` + `CEREMONY` audit event); `manage ca-sign-device` certifies each
+   station binding; `openMachine` fails closed on missing/invalid certs whenever
+   a CA is published. Remaining: HSM storage, 2-of-3 root-share splitting
+   (private key is a single file), and an INDEPENDENT cryptographic review.
 2. **No firmware attestation.** `firmware_hash` is a asserted string, not measured boot. GAP — procedural only.
 3. **V1 ballot privacy is structural, not cryptographic.** Separation + single-use tokens + privacy lint; votes are NOT homomorphically encrypted and there are no mixnets/ZK proofs (FULL_PLAN §§27–28, correctly DEFERRED).
 4. **Audit log signatures: PARTIALLY CLOSED.** `AuditLog` supports Ed25519

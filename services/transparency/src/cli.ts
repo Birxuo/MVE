@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createPublicKey, verify } from 'node:crypto';
 import { canonical, sha256Hex } from '../../election-core/src/crypto-utils.js';
 import { resolveLocale, t } from '../../election-core/src/i18n.js';
-import { loadElection, loadEvents, loadIncidents, loadLedger, loadResults, saveLedger } from '../../election-core/src/store.js';
+import { loadElection, loadEvents, loadIncidents, loadLedger, loadResults, loadRevoked, saveLedger } from '../../election-core/src/store.js';
 import { summarize } from '../../incidents/src/index.js';
 import { appendCheckpoint, inclusionProof, verifyLedger, verifyProof, type LedgerCheckpoint } from './ledger.js';
 import { csvField, toCSV, toDatasetCSV, toPublic } from './index.js';
@@ -50,6 +50,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     const pubkeyPem = typeof a['pubkey'] === 'string' ? readFileSync(String(a['pubkey']), 'utf8') : undefined;
+    const revoked = new Set(loadRevoked(root).map((x) => x.stationId));
     let allOk = true;
     for (const r of rows) {
       const { result_hash, signature, ...body } = r;
@@ -61,10 +62,11 @@ async function main(): Promise<void> {
           sigOk = verify(null, Buffer.from(result_hash, 'hex'), createPublicKey(pubkeyPem), Buffer.from(signature, 'hex'));
         } catch { sigOk = false; }
       }
-      const ok = hashOk && sigOk !== false;
+      const isRevoked = revoked.has(r.polling_station);
+      const ok = hashOk && sigOk !== false && !isRevoked;
       allOk &&= ok;
       const lang = resolveLocale(a['lang']);
-      console.log(`${r.polling_station}: hash=${hashOk ? 'OK' : 'FAIL'} sig=${sigOk} ${ok ? t(lang, 'verify.valid') : t(lang, 'verify.invalid')}`);
+      console.log(`${r.polling_station}: hash=${hashOk ? 'OK' : 'FAIL'} sig=${sigOk}${isRevoked ? ' REVOKED' : ''} ${ok ? t(lang, 'verify.valid') : t(lang, 'verify.invalid')}`);
     }
     process.exit(allOk ? 0 : 3);
     return;
@@ -109,6 +111,9 @@ async function main(): Promise<void> {
         .join('\n'),
       'incidents.csv': ['id,station,category,status,ts,description']
         .concat(loadIncidents(root).map((x) => [x.id, x.stationId, x.category, x.status, x.ts, x.description].map(csvField).join(',')))
+        .join('\n'),
+      'revoked.csv': ['device,station,reason,ts,revokedBy']
+        .concat(loadRevoked(root).map((x) => [x.deviceId, x.stationId, x.reason, x.ts, x.revokedBy].map(csvField).join(',')))
         .join('\n'),
     };
     for (const [name, content] of Object.entries(files)) {

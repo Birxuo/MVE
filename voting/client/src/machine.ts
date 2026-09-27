@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { canonical, participationReceipt, sha256Hex } from '../../../services/election-core/src/crypto-utils.js';
 import {
-  DATA_ROOT, ensureDataDirs, loadBallots, loadElection, loadEvents, loadResults, loadVoters,
+  DATA_ROOT, ensureDataDirs, loadBallots, loadCa, loadElection, loadEvents, loadResults, loadVoters,
   saveBallots, saveElection, saveEvents, saveResults, saveVoters,
 } from '../../../services/election-core/src/store.js';
 import type { AuditEvent, Ballot } from '../../../services/election-core/src/types.js';
@@ -20,7 +20,7 @@ import { signResult, tally } from '../../../services/results/src/index.js';
 import { reconcile } from '../../../services/audit/src/index.js';
 import { signEvent } from '../../../services/audit/src/index.js';
 import { createPublicKey, verify } from 'node:crypto';
-import { ensureDevice, verifyFirmware } from './device.js';
+import { ensureDevice, verifyDeviceCert, verifyFirmware } from './device.js';
 
 export interface PaperSlip { slipId: string; stationId: string; deviceId: string; choiceId: string; ts: string; election: string; }
 
@@ -75,9 +75,18 @@ export function openMachine(root: string, stationId: string, measuredFirmware: s
   const registered = st.firmwareHash || measuredFirmware;
   const { record, privateKeyPem } = ensureDevice(root, stationId, st.deviceId, registered);
   verifyFirmware(record, measuredFirmware, stationId);
+  // Fail closed under a certified election: a published CA means every device
+  // must carry a valid certificate. Without a CA, the legacy procedural path
+  // applies and the opening record says so (observers can see it).
+  const ca = loadCa(root);
+  let certified = false;
+  if (ca) {
+    verifyDeviceCert(record, ca.rootPubPem, stationId);
+    certified = true;
+  }
   st.status = 'open';
   saveElection(s, root);
-  audit(root, 'POLL_OPENED', stationId, st.deviceId, { approvals, firmwareHash: record.firmwareHash }, privateKeyPem);
+  audit(root, 'POLL_OPENED', stationId, st.deviceId, { approvals, firmwareHash: record.firmwareHash, certified }, privateKeyPem);
 }
 
 /** Cast one ballot: authorize → cast → print slip → (confirm) → deposit. */

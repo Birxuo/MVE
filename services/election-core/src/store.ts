@@ -17,6 +17,9 @@ export const STORES = {
   transparency: 'transparency/results.json',
   incidents: 'incidents/incidents.json',
   ledger: 'transparency/ledger.json',
+  ca: 'ca/ca.json',
+  revoked: 'ca/revoked.json',
+  ceremony: 'ca/ceremony.json',
 } as const;
 
 export interface ElectionStore {
@@ -106,4 +109,52 @@ export function loadLedger<T = unknown>(root = DATA_ROOT): T[] {
 
 export function saveLedger(chain: unknown, root = DATA_ROOT): void {
   writeJson(STORES.ledger, chain, root);
+}
+
+export interface CaRecord {
+  createdAt: string; custodians: string[]; observer: string; imageHash: string;
+  rootPubPem: string;
+  devices: { station: string; deviceId: string; firmwareHash: string; devicePub: string; cert: string }[];
+}
+
+export interface Revocation { deviceId: string; stationId: string; reason: string; ts: string; revokedBy: string; }
+
+export interface CeremonyRecord {
+  ts: string; custodians: string[]; observer: string; imageHash: string; rootPubPem: string;
+}
+
+export function loadCa(root = DATA_ROOT): CaRecord | undefined {
+  const p = join(root, STORES.ca);
+  if (!existsSync(p)) return undefined;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as CaRecord;
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveCa(rec: CaRecord, root = DATA_ROOT): void {
+  writeJson(STORES.ca, rec, root);
+}
+
+export function loadRevoked(root = DATA_ROOT): Revocation[] {
+  return readJson<Revocation[]>(STORES.revoked, [], root);
+}
+
+export function saveRevoked(list: Revocation[], root = DATA_ROOT): void {
+  writeJson(STORES.revoked, list, root);
+}
+
+export function loadCeremony(root = DATA_ROOT): CeremonyRecord | undefined {
+  const p = join(root, STORES.ceremony);
+  if (!existsSync(p)) return undefined;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as CeremonyRecord;
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveCeremony(rec: CeremonyRecord, root = DATA_ROOT): void {
+  writeJson(STORES.ceremony, rec, root);
 }

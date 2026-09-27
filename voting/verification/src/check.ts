@@ -5,7 +5,7 @@
 // Usage: node dist/voting/verification/check.js [--station X] [--sample N] [--seed S] [--data data]
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DATA_ROOT, loadBallots, loadElection, loadResults } from '../../../services/election-core/src/store.js';
+import { DATA_ROOT, loadBallots, loadElection, loadResults, loadRevoked } from '../../../services/election-core/src/store.js';
 import { sampleStations, seedFromCeremony } from '../../../services/audit/src/index.js';
 import type { Ballot, ResultPackage } from '../../../services/election-core/src/types.js';
 import type { PaperSlip } from '../../client/src/machine.js';
@@ -53,6 +53,7 @@ function talliesEqual(a: Record<string, number>, b: Record<string, number>): boo
 
 const election = loadElection(ROOT);
 const published = loadResults(ROOT);
+const revokedStations = new Set(loadRevoked(ROOT).map((x) => x.stationId));
 // Indexed once: per-station scans below stay linear at 10k-station scale.
 const ballotsByStation = new Map<string, Ballot[]>();
 for (const b of loadBallots(ROOT)) {
@@ -88,12 +89,13 @@ for (const station of stations) {
     slipDiff.push(...eBallots.filter((b: Ballot) => !sIds.has(b.ballotId)).map((b: Ballot) => `electronic-only:${b.ballotId}`));
   }
   const ok = slips.length === eBallots.length && talliesMatch && publishedMatch && slipDiff.length === 0;
-  if (!ok) bad++;
+  const isRevoked = revokedStations.has(station);
+  if (!ok || isRevoked) bad++;
   // At scale, print mismatches only (matches counted silently).
-  if (!ok || stations.length <= 200 || ONLY) {
+  if (!ok || isRevoked || stations.length <= 200 || ONLY) {
     console.log(JSON.stringify({
       station, paper: slips.length, electronic: eBallots.length, published: pub?.ballots_counted ?? 0,
-      paperTally, status: ok ? 'MATCH' : 'MISMATCH',
+      paperTally, status: isRevoked ? 'REVOKED' : ok ? 'MATCH' : 'MISMATCH',
       ...(sampled?.has(station) ? { rlaSampled: true, slipDiff } : {}),
     }));
   }

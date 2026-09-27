@@ -8,7 +8,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonical, sha256Hex } from '../../../services/election-core/src/crypto-utils.js';
-import { loadElection, loadEvents, loadIncidents, loadResults } from '../../../services/election-core/src/store.js';
+import { loadElection, loadEvents, loadIncidents, loadResults, loadRevoked } from '../../../services/election-core/src/store.js';
 import { lookupRegistration } from '../../../services/eligibility/src/lookup.js';
 import { toPublic } from '../../../services/transparency/src/index.js';
 
@@ -92,13 +92,19 @@ function route(root: string, method: string, url: string): { code: number; body:
       const q = u.searchParams.get('station');
       const rows = q ? loadResults(root).filter((r) => r.polling_station === q) : loadResults(root);
       if (!rows.length) return { code: 404, body: { error: 'no results found' } };
+      const revoked = new Set(loadRevoked(root).map((x) => x.stationId));
       return {
         code: 200,
         body: rows.map((r) => {
           const { result_hash, signature, ...body } = r;
           void signature;
           const recomputed = sha256Hex(canonical(body));
-          return { station: r.polling_station, result_hash, hashOk: recomputed === result_hash };
+          const hashOk = recomputed === result_hash;
+          const isRevoked = revoked.has(r.polling_station);
+          return {
+            station: r.polling_station, result_hash, hashOk,
+            revoked: isRevoked, valid: hashOk && !isRevoked,
+          };
         }),
       };
     }

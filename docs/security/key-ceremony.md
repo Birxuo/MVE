@@ -12,6 +12,9 @@ ever holds signing power alone.
 
 ## Ceremony steps
 
+Implemented subset (`manage ceremony|ca-sign-device|revoke-device`,
+`voting/client/src/device.ts`, enforced in `openMachine`):
+
 1. **Prepare.** Air-gapped machine, booted from published installer image.
    B verifies `sha256` of the image against the published value; C records it.
 2. **Election root.** Generate the offline election root Ed25519 keypair.

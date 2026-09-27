@@ -53,6 +53,16 @@ function canonical(o) {
 const DIR = arg('dir', 'open-data');
 const PUBKEYS = arg('pubkeys', '');
 
+// Revocation: if revoked.csv ships with the dataset, those stations verify
+// as INVALID regardless of hash/signature state.
+const revoked = new Set();
+const revokedPath = join(DIR, 'revoked.csv');
+if (existsSync(revokedPath)) {
+  const [rhead, ...rlines] = parseCSV(readFileSync(revokedPath, 'utf8'));
+  const si = rhead.indexOf('station');
+  for (const l of rlines) if (l[si]) revoked.add(l[si]);
+}
+
 const raw = readFileSync(join(DIR, 'results.csv'), 'utf8');
 const [header, ...lines] = parseCSV(raw);
 const need = ['election', 'station', 'device', 'ballots_issued', 'counted', 'invalid',
@@ -108,9 +118,9 @@ for (const line of lines) {
       sig = ok ? 'OK' : 'FAIL';
     } catch { sig = 'FAIL'; }
   }
-  const ok = hashOk && countOk && sig !== 'FAIL';
+  const ok = hashOk && countOk && sig !== 'FAIL' && !revoked.has(station);
   if (!ok) bad++;
-  console.log(`${station}: hash=${hashOk ? 'OK' : 'FAIL'} count=${countOk ? 'OK' : 'FAIL'} sig=${sig} ${ok ? 'VALID' : 'INVALID'}`);
+  console.log(`${station}: hash=${hashOk ? 'OK' : 'FAIL'} count=${countOk ? 'OK' : 'FAIL'} sig=${sig}${revoked.has(station) ? ' REVOKED' : ''} ${ok ? 'VALID' : 'INVALID'}`);
   for (const [c, n] of Object.entries(results)) totals[c] = (totals[c] || 0) + n;
 }
 

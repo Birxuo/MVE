@@ -5,11 +5,14 @@
 // time and ENFORCED at open (refuse on mismatch).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { generateKeyPairSync } from 'node:crypto';
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from 'node:crypto';
+import { canonical, sha256Hex } from '../../../services/election-core/src/crypto-utils.js';
 
 export interface DeviceRecord {
   deviceId: string; stationId: string; firmwareHash: string;
   publicKeyPem: string; boundAt: string;
+  /** CA certificate: root signature over the binding (absent = uncertified legacy path). */
+  cert?: string;
 }
 
 export function stationDir(root: string, stationId: string): string {
@@ -48,4 +51,35 @@ export function verifyFirmware(record: DeviceRecord, actual: string, stationId: 
       `${stationId}: firmware mismatch — expected ${record.firmwareHash}, got ${actual}. Refusing to open.`,
     );
   }
+}
+
+/** Canonical bytes the CA certifies for a device binding. */
+export function certBody(record: Pick<DeviceRecord, 'deviceId' | 'stationId' | 'firmwareHash' | 'publicKeyPem'>): string {
+  return canonical({
+    deviceId: record.deviceId, stationId: record.stationId,
+    firmwareHash: record.firmwareHash, publicKeyPem: record.publicKeyPem,
+  });
+}
+
+/** Issue a CA certificate for a device binding (ceremony step 3). */
+export function signDeviceBinding(
+  record: Pick<DeviceRecord, 'deviceId' | 'stationId' | 'firmwareHash' | 'publicKeyPem'>,
+  caPrivateKeyPem: string,
+): string {
+  return sign(null, Buffer.from(sha256Hex(certBody(record)), 'hex'), createPrivateKey(caPrivateKeyPem)).toString('hex');
+}
+
+/** Verify a device certificate against the election root key. Throws with reason. */
+export function verifyDeviceCert(record: DeviceRecord, caPublicKeyPem: string, stationId: string): void {
+  if (!record.cert) throw new Error(`${stationId}: uncertified device (no CA certificate)`);
+  let ok = false;
+  try {
+    ok = verify(
+      null, Buffer.from(sha256Hex(certBody(record)), 'hex'),
+      createPublicKey(caPublicKeyPem), Buffer.from(record.cert, 'hex'),
+    );
+  } catch {
+    ok = false;
+  }
+  if (!ok) throw new Error(`${stationId}: device certificate INVALID (binding changed or wrong root)`);
 }
