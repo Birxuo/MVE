@@ -31,7 +31,10 @@ npm audit              # must stay 0 vulnerabilities
 | `simulate` default | 10 × 50 | ~450 | <2s | n/a |
 | `--stations 100 --voters 50` | 100 × 50 | ~4,500 | 0.6s | n/a |
 | `--stations 1000 --voters 50` | 1000 × 50 | ~45,000 | 5.0s | 234 MB |
+| `--stations 10000 --voters 50` | 10000 × 50 | ~450,000 | 4m52s | 1.1 GB |
 
-Note: 1000-station memory is dominated by in-memory maps + per-station Ed25519
-keygen; acceptable for research. 10,000-station runs (README Phase 4) will need
-streaming writes — recorded as future work, not attempted in V1.
+Streaming (`--flush-every 500`, per-station artifact writes) keeps 10k runs
+completing on the dev machine. Peak memory is dominated by full-file
+merge-parses of the growing voter/ballot JSON stores, not the window state —
+further scale needs sharded/append-only stores (recorded future work, not V1).
+Console CSV auto-suppresses over 200 stations (use `--out`).

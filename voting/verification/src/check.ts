@@ -52,8 +52,17 @@ function talliesEqual(a: Record<string, number>, b: Record<string, number>): boo
 }
 
 const election = loadElection(ROOT);
-const ballots = loadBallots(ROOT);
 const published = loadResults(ROOT);
+// Indexed once: per-station scans below stay linear at 10k-station scale.
+const ballotsByStation = new Map<string, Ballot[]>();
+for (const b of loadBallots(ROOT)) {
+  const arr = ballotsByStation.get(b.stationId);
+  if (arr) arr.push(b);
+  else ballotsByStation.set(b.stationId, [b]);
+}
+const publishedByStation = new Map<string, ResultPackage>(
+  published.map((r: ResultPackage) => [r.polling_station, r]),
+);
 const stations = (ONLY ? election.stations.filter((s) => s.id === ONLY) : election.stations).map((s) => s.id);
 if (ONLY && !stations.length) {
   console.error(`unknown station ${ONLY}`);
@@ -64,8 +73,8 @@ const sampled = SAMPLE_N > 0 ? new Set(sampleStations(stations, SAMPLE_N, SEED))
 let bad = 0;
 for (const station of stations) {
   const slips = readSlips(ROOT, station);
-  const eBallots: Ballot[] = ballots.filter((b: Ballot) => b.stationId === station);
-  const pub: ResultPackage | undefined = published.find((r: ResultPackage) => r.polling_station === station);
+  const eBallots: Ballot[] = ballotsByStation.get(station) ?? [];
+  const pub: ResultPackage | undefined = publishedByStation.get(station);
   const paperTally = tallyChoices(slips);
   const eTally = tallyChoices(eBallots);
   const talliesMatch = talliesEqual(paperTally, eTally);
@@ -80,11 +89,14 @@ for (const station of stations) {
   }
   const ok = slips.length === eBallots.length && talliesMatch && publishedMatch && slipDiff.length === 0;
   if (!ok) bad++;
-  console.log(JSON.stringify({
-    station, paper: slips.length, electronic: eBallots.length, published: pub?.ballots_counted ?? 0,
-    paperTally, status: ok ? 'MATCH' : 'MISMATCH',
-    ...(sampled?.has(station) ? { rlaSampled: true, slipDiff } : {}),
-  }));
+  // At scale, print mismatches only (matches counted silently).
+  if (!ok || stations.length <= 200 || ONLY) {
+    console.log(JSON.stringify({
+      station, paper: slips.length, electronic: eBallots.length, published: pub?.ballots_counted ?? 0,
+      paperTally, status: ok ? 'MATCH' : 'MISMATCH',
+      ...(sampled?.has(station) ? { rlaSampled: true, slipDiff } : {}),
+    }));
+  }
 }
 console.log(bad ? `MISMATCH at ${bad} station(s)` : `all ${stations.length} station(s) MATCH`);
 process.exit(bad ? 3 : 0);

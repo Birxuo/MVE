@@ -24,6 +24,19 @@ npm run failures -- --only tamper       # single scenario
 | corrupt-device | wrong firmware hash | open refused |
 | duplicate | every token replayed | all blocked, count stable |
 
+## Chaos drills (T8): power, partition, DB corruption
+
+```bash
+npm run chaos                        # all 3 scenarios, exit 1 on any MISS
+npm run chaos -- --only power        # single scenario
+```
+
+| scenario | injection | expected detection |
+|---|---|---|
+| power | halt mid-day (no close), then resume | no package at halt; resume counts all |
+| partition | same bundle to two terminals + replay | identical hashes, no double-count |
+| db-corruption | bit-flipped ballot store | paper/electronic gap flagged; station copy intact |
+
 ## DR drill (T2.2)
 
 ```bash

@@ -42,11 +42,13 @@ try {
     { encoding: 'utf8' }).split('\n').map((s) => s.trim()).filter(Boolean);
   const EXEMPT = new Set([
     'services/election-core/src/store.ts',
-    // Polling booth (voter present and casting) and bulk mock-data generator:
-    // both bridge transiently but persist the domains separately — verified by
+    // Polling booth (voter present and casting) and scenario harnesses:
+    // all bridge transiently but persist the domains separately — verified by
     // the data-level separation scans in tests/paper.test.ts.
     'voting/client/src/machine.ts',
     'research/simulations/simulate.ts',
+    'research/simulations/chaos.ts',
+    'research/simulations/barriers.ts',
   ]);
   for (const f of files) {
     if (EXEMPT.has(f)) continue;

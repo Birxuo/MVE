@@ -2,14 +2,14 @@
 import { EligibilityService } from '../../services/eligibility/src/index.js';
 import { BallotService } from '../../services/ballot/src/index.js';
 import { generateDeviceKeys, signResult, tally } from '../../services/results/src/index.js';
-import { AuditLog, analyzeTelemetry, reconcile, sampleStations } from '../../services/audit/src/index.js';
+import { AuditLog, analyzeTelemetry, reconcile, sampleStations, verifyEventChain } from '../../services/audit/src/index.js';
 import { toPublic, toCSV } from '../../services/transparency/src/index.js';
 import { participationReceipt } from '../../services/election-core/src/crypto-utils.js';
-import { ensureDataDirs, loadIncidents, saveBallots, saveElection, saveEvents, saveIncidents, saveResults, saveVoters } from '../../services/election-core/src/store.js';
+import { ensureDataDirs, loadBallots, loadEvents, loadIncidents, loadVoters, saveBallots, saveElection, saveEvents, saveIncidents, saveResults, saveVoters } from '../../services/election-core/src/store.js';
 import { incidentsFromFlags } from '../../services/incidents/src/index.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ResultPackage, Voter } from '../../services/election-core/src/types.js';
+import type { AuditEvent, Ballot, ResultPackage, Voter } from '../../services/election-core/src/types.js';
 
 function parseArgs(raw: string[]): Record<string, string | true> {
   const out: Record<string, string | true> = {};
@@ -29,19 +29,17 @@ const SEED = Number(args['seed'] ?? 42);
 const DATA_ROOT = String(args['data'] ?? 'data');
 const OUT_CSV = typeof args['out'] === 'string' ? String(args['out']) : undefined;
 const WITH_PAPER = args['paper'] === true || String(args['paper'] ?? '') === '1';
+// Streaming: flush bulky stores every N stations so 10k-station runs stay
+// bounded in memory (small metadata maps are kept whole-run).
+const FLUSH_EVERY = Math.max(1, Number(args['flush-every'] ?? 500));
 const CANDIDATES = ['party_a', 'party_b', 'party_c'];
 
-const eligibility = new EligibilityService();
-const ballots = new BallotService(eligibility);
-const audit = new AuditLog();
 const validChoices = new Set(CANDIDATES);
 
 const stationIds: string[] = [];
 const resultPkgs: ResultPackage[] = [];
 const audits = new Map<string, string>();
-const devicePubkeys = new Map<string, string>();
 const stationDevices = new Map<string, string>();
-const simVoters: Voter[] = [];
 
 // Deterministic pseudo-random for reproducibility
 let seed = SEED;
@@ -49,6 +47,39 @@ const rand = (): number => {
   seed = (seed * 1103515245 + 12345) & 0x7fffffff;
   return seed / 0x7fffffff;
 };
+
+ensureDataDirs(DATA_ROOT);
+
+// Window state: bulky per-voter/per-ballot/per-event data flushes to disk every
+// FLUSH_EVERY stations; only small metadata maps stay whole-run in memory.
+let eligibility = new EligibilityService();
+let ballots = new BallotService(eligibility);
+let audit = new AuditLog();
+let simVoters: Voter[] = [];
+let chainNextSeq = 0;
+let chainTip = 'GENESIS';
+let firstFlush = true;
+
+function flushWindow(): void {
+  if (firstFlush) {
+    saveVoters(simVoters, DATA_ROOT);
+    saveBallots(ballots.all(), DATA_ROOT);
+    saveEvents(audit.all(), DATA_ROOT);
+    firstFlush = false;
+  } else {
+    saveVoters(loadVoters(DATA_ROOT).concat(simVoters), DATA_ROOT);
+    saveBallots(loadBallots(DATA_ROOT).concat(ballots.all()), DATA_ROOT);
+    saveEvents(loadEvents(DATA_ROOT).concat(audit.all()), DATA_ROOT);
+  }
+  const tip = audit.tip();
+  chainNextSeq = tip.nextSeq;
+  chainTip = tip.prevHash;
+  // Release window memory; next window resumes the chain from the tip.
+  eligibility = new EligibilityService();
+  ballots = new BallotService(eligibility);
+  audit = new AuditLog(undefined, chainNextSeq, chainTip);
+  simVoters = [];
+}
 
 for (let s = 0; s < N_STATIONS; s++) {
   const stationId = `TANGER-ASilah-${String(s + 1).padStart(4, '0')}`;
@@ -91,11 +122,29 @@ for (let s = 0; s < N_STATIONS; s++) {
   }, keys.privateKeyPem);
   // Re-verify immediately (device self-check)
   resultPkgs.push(pkg);
-  devicePubkeys.set(stationId, keys.publicKeyPem);
   stationDevices.set(stationId, deviceId);
   audit.append('POLL_CLOSED', stationId, deviceId, { approvals: ['presiding', 'deputy', 'observer'], reconcile: rec.detail });
   audit.append('RESULT_SIGNED', stationId, deviceId, { result_hash: pkg.result_hash });
   audits.set(stationId, rec.ok ? 'PASSED' : 'ESCALATED');
+
+  // Stream bulky per-station artifacts immediately (bounded memory).
+  {
+    const dir = join(DATA_ROOT, 'stations', stationId);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'result.json'), JSON.stringify(pkg, null, 2) + '\n');
+    writeFileSync(join(dir, 'device.pub.pem'), keys.publicKeyPem);
+  }
+  if (WITH_PAPER) {
+    for (const b of ballots.forStation(stationId)) {
+      const dir = join(DATA_ROOT, 'paper', stationId);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${b.ballotId}.json`), JSON.stringify({
+        slipId: b.ballotId, stationId,
+        deviceId, choiceId: b.choiceId, ts: b.ts, election: '2026-L-SIM',
+      }, null, 2) + '\n');
+    }
+  }
+  if ((s + 1) % FLUSH_EVERY === 0 || s === N_STATIONS - 1) flushWindow();
 }
 
 // RLA: sample 20% (min 2)
@@ -108,7 +157,8 @@ console.log(`RLA sample (${sampled.length}): ${sampled.join(', ')}`);
 // the audit log itself (open durations, result delays, exceptions, reopens)
 // plus recount status (ESCALATED stations).
 const INJECT = args['anomalies'] === true || String(args['anomalies'] ?? '') === '1';
-const events = audit.all();
+// Post-flush: telemetry reads the persisted chain (window services are released).
+const events = loadEvents(DATA_ROOT);
 const tsOf = (type: string, id: string, nth = 0): number => {
   const hits = events.filter((e) => e.type === type && e.stationId === id);
   return hits.length > nth ? Date.parse(hits[nth].ts) : NaN;
@@ -133,12 +183,17 @@ const anomalies = analyzeTelemetry(stationIds.map((id, i) => {
   };
 }));
 console.log(anomalies.length ? `Flags: ${JSON.stringify(anomalies)}` : 'No anomalies flagged.');
-console.log(`Audit chain ok: ${audit.verifyChain().ok}`);
+console.log(`Audit chain ok: ${verifyEventChain(events).ok}`);
 
 const pub = toPublic(resultPkgs, audits);
 const csv = toCSV(pub);
-console.log('\n--- results.csv (public) ---');
-console.log(csv);
+if (N_STATIONS <= 200) {
+  console.log('\n--- results.csv (public) ---');
+  console.log(csv);
+} else {
+  const total = resultPkgs.reduce((n, p) => n + p.ballots_counted, 0);
+  console.log(`\n${resultPkgs.length} stations, ${total} ballots counted (CSV suppressed over 200 stations; use --out)`);
+}
 
 // Persist to file stores (all six) for CLI verification.
 ensureDataDirs(DATA_ROOT);
@@ -152,33 +207,9 @@ saveElection({
   candidates: CANDIDATES.map((c) => ({ id: c, electionId: '2026-L-SIM', name: c, party: c })),
   officers: [],
 }, DATA_ROOT);
-saveVoters(simVoters, DATA_ROOT);
+// Voters, ballots, events, station dirs, and paper slips already streamed per
+// window above; only small metadata aggregates persist here.
 saveResults(resultPkgs, DATA_ROOT);
-saveEvents(audit.all(), DATA_ROOT);
-saveBallots(ballots.all(), DATA_ROOT);
-// Station-local retention: each station keeps its own signed package + pubkey
-// (DR copy #2 alongside the national aggregate; FULL_PLAN §32).
-for (const pkg of resultPkgs) {
-  const dir = join(DATA_ROOT, 'stations', pkg.polling_station);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'result.json'), JSON.stringify(pkg, null, 2) + '\n');
-  const pub = devicePubkeys.get(pkg.polling_station);
-  if (pub) writeFileSync(join(dir, 'device.pub.pem'), pub);
-}
-// Paper stream: one slip per electronic ballot (voter-verified record analogue).
-// Slips carry choice only — never voter IDs (same rule as voting/client).
-if (WITH_PAPER) {
-  for (const b of ballots.all()) {
-    const dir = join(DATA_ROOT, 'paper', b.stationId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `${b.ballotId}.json`), JSON.stringify({
-      slipId: b.ballotId, stationId: b.stationId,
-      deviceId: stationDevices.get(b.stationId) ?? 'unknown',
-      choiceId: b.choiceId, ts: b.ts, election: '2026-L-SIM',
-    }, null, 2) + '\n');
-  }
-  console.log(`wrote paper slips for ${ballots.all().length} ballots`);
-}
 const incidentStore = loadIncidents(DATA_ROOT);
 const auto = incidentsFromFlags(incidentStore, anomalies);
 if (auto.length) {

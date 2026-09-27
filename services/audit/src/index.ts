@@ -12,12 +12,16 @@ function eventBody(e: { seq: number; ts: string; type: string; stationId: string
 
 export class AuditLog {
   private events: AuditEvent[] = [];
-  private prevHash = 'GENESIS';
+  private prevHash: string;
+  private baseSeq: number;
 
-  constructor(private signer?: EventSigner) {}
+  constructor(private signer?: EventSigner, startSeq = 0, startPrevHash = 'GENESIS') {
+    this.baseSeq = startSeq;
+    this.prevHash = startPrevHash;
+  }
 
   append(type: string, stationId: string, deviceId: string, payload: Record<string, unknown> = {}): AuditEvent {
-    const seq = this.events.length;
+    const seq = this.baseSeq + this.events.length;
     const ts = new Date().toISOString();
     const hash = sha256Hex(this.prevHash + '|' + eventBody({ seq, ts, type, stationId, deviceId, payload }));
     const ev: AuditEvent = { seq, ts, type, stationId, deviceId, payload, prevHash: this.prevHash, hash };
@@ -33,6 +37,11 @@ export class AuditLog {
   }
 
   all(): AuditEvent[] { return [...this.events]; }
+
+  /** Chain tip for resuming across flush windows (streaming runs). */
+  tip(): { nextSeq: number; prevHash: string } {
+    return { nextSeq: this.baseSeq + this.events.length, prevHash: this.prevHash };
+  }
 
   /** Independent replica: deep copy for off-site storage; verifies on restore. */
   fork(): AuditEvent[] {
