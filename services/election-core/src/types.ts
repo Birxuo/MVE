@@ -10,7 +10,7 @@ export interface PollingStation {
   deviceId: string; firmwareHash: string;
 }
 export interface Candidate { id: string; electionId: string; name: string; party: string; }
-export interface Officer { id: string; stationId: string; role: 'presiding' | 'deputy' | 'observer'; }
+export interface Officer { id: string; stationId: string; role: 'presiding' | 'deputy' | 'observer'; pubkeyPem?: string; }
 
 // Identity domain — NEVER holds choices (see docs/architecture/database.md)
 export interface Voter { voterId: string; districtId: string; stationId: string; eligible: boolean; status: 'NOT_VOTED' | 'VOTED'; }

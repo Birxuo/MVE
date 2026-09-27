@@ -18,23 +18,51 @@ import { EligibilityService } from '../../../services/eligibility/src/index.js';
 import { BallotService } from '../../../services/ballot/src/index.js';
 import { signResult, tally } from '../../../services/results/src/index.js';
 import { reconcile } from '../../../services/audit/src/index.js';
+import { signEvent } from '../../../services/audit/src/index.js';
+import { createPublicKey, verify } from 'node:crypto';
 import { ensureDevice, verifyFirmware } from './device.js';
 
 export interface PaperSlip { slipId: string; stationId: string; deviceId: string; choiceId: string; ts: string; election: string; }
+
+/**
+ * Endorsement digest: sha256 over the tally CONTENT only (no timestamp), so an
+ * officer can endorse the exact counts once and the endorsement stays valid
+ * across re-signing. The device signature separately binds the timestamped package.
+ */
+export function endorsementDigest(p: {
+  election: string; polling_station: string; device: string;
+  ballots_issued: number; ballots_counted: number; invalid_ballots: number;
+  results: Record<string, number>; firmware_hash: string;
+}): string {
+  return sha256Hex(canonical({
+    election: p.election, polling_station: p.polling_station, device: p.device,
+    ballots_issued: p.ballots_issued, ballots_counted: p.ballots_counted,
+    invalid_ballots: p.invalid_ballots, results: p.results, firmware_hash: p.firmware_hash,
+  }));
+}
 
 export function paperDir(root: string, stationId: string): string {
   return join(root, 'paper', stationId);
 }
 
-function audit(root: string, type: string, stationId: string, deviceId: string, payload: Record<string, unknown>): void {
+function audit(
+  root: string, type: string, stationId: string, deviceId: string,
+  payload: Record<string, unknown>, privateKeyPem?: string,
+): void {
   const events = loadEvents(root);
   const seq = events.length;
   const ts = new Date().toISOString();
   const prevHash = events.length ? events[events.length - 1].hash : 'GENESIS';
   const hash = sha256Hex(prevHash + '|' + canonical({ seq, ts, type, stationId, deviceId, payload }));
   const ev: AuditEvent = { seq, ts, type, stationId, deviceId, payload, prevHash, hash };
+  if (privateKeyPem) ev.signature = signEvent(hash, privateKeyPem);
   events.push(ev);
   saveEvents(events, root);
+}
+
+function stationPrivKey(root: string, stationId: string): string | undefined {
+  const p = join(root, 'stations', stationId, 'device.priv.pem');
+  return existsSync(p) ? readFileSync(p, 'utf8') : undefined;
 }
 
 /** Open the polls: firmware gate + ≥2 approvals. */
@@ -45,11 +73,11 @@ export function openMachine(root: string, stationId: string, measuredFirmware: s
   if (!st) throw new Error(`unknown station ${stationId}`);
   if (st.status === 'open') throw new Error(`${stationId} already open`);
   const registered = st.firmwareHash || measuredFirmware;
-  const { record } = ensureDevice(root, stationId, st.deviceId, registered);
+  const { record, privateKeyPem } = ensureDevice(root, stationId, st.deviceId, registered);
   verifyFirmware(record, measuredFirmware, stationId);
   st.status = 'open';
   saveElection(s, root);
-  audit(root, 'POLL_OPENED', stationId, st.deviceId, { approvals, firmwareHash: record.firmwareHash });
+  audit(root, 'POLL_OPENED', stationId, st.deviceId, { approvals, firmwareHash: record.firmwareHash }, privateKeyPem);
 }
 
 /** Cast one ballot: authorize → cast → print slip → (confirm) → deposit. */
@@ -90,12 +118,18 @@ export function castBallot(
   };
   mkdirSync(paperDir(root, stationId), { recursive: true });
   writeFileSync(join(paperDir(root, stationId), `${ballot.ballotId}.json`), JSON.stringify(slip, null, 2) + '\n');
-  audit(root, 'BALLOT_CAST', stationId, st.deviceId, { ballot: ballot.ballotId });
+  audit(root, 'BALLOT_CAST', stationId, st.deviceId, { ballot: ballot.ballotId }, stationPrivKey(root, stationId));
   return { ballotId: ballot.ballotId, receipt: participationReceipt(ballot.ballotId) };
 }
 
-/** Close the polls: reconcile paper↔electronic, refuse to sign on mismatch, else sign. */
-export function closeMachine(root: string, stationId: string, approvals: string[]) {
+/** Close the polls: reconcile paper↔electronic, refuse to sign on mismatch, else sign.
+ * Dual control: stations with registered officer keys additionally require ≥1
+ * officer endorsement signature over the exact result_hash (device key + human
+ * key must both bind the same hash). Stations without officer keys skip this. */
+export function closeMachine(
+  root: string, stationId: string, approvals: string[],
+  opts: { endorsements?: { officer: string; signature: string }[] } = {},
+) {
   if (approvals.length < 3) throw new Error(`close requires >=3 approvals (got ${approvals.length})`);
   const s = loadElection(root);
   const st = s.stations.find((x) => x.id === stationId);
@@ -116,11 +150,35 @@ export function closeMachine(root: string, stationId: string, approvals: string[
   const { results, counted } = tally(ballots);
   const privPath = join(root, 'stations', stationId, 'device.priv.pem');
   if (!existsSync(privPath)) throw new Error(`${stationId}: no device private key (open first)`);
+  const devicePriv = readFileSync(privPath, 'utf8');
   const pkg = signResult({
     election: s.elections[0]?.id ?? 'ELECTION', polling_station: stationId, device: st.deviceId,
     ballots_issued: authorized, ballots_counted: counted, invalid_ballots: 0,
     results, timestamp: new Date().toISOString(), firmware_hash: st.firmwareHash,
-  }, readFileSync(privPath, 'utf8'));
+  }, devicePriv);
+
+  const keyedOfficers = s.officers.filter((o) => o.stationId === stationId && o.pubkeyPem);
+  const endorsers: string[] = [];
+  const digest = endorsementDigest({
+    election: s.elections[0]?.id ?? 'ELECTION', polling_station: stationId, device: st.deviceId,
+    ballots_issued: authorized, ballots_counted: counted, invalid_ballots: 0,
+    results, firmware_hash: st.firmwareHash,
+  });
+  if (keyedOfficers.length) {
+    for (const e of opts.endorsements ?? []) {
+      const off = keyedOfficers.find((o) => o.id === e.officer);
+      if (!off?.pubkeyPem) continue;
+      try {
+        if (verify(null, Buffer.from(digest, 'hex'),
+          createPublicKey(off.pubkeyPem), Buffer.from(e.signature.trim(), 'hex'))) {
+          endorsers.push(off.id);
+        }
+      } catch { /* invalid endorsement — ignored, quorum decides */ }
+    }
+    if (!endorsers.length) {
+      throw new Error(`${stationId}: no valid officer endorsement over tally ${digest} (dual control)`);
+    }
+  }
 
   const results_ = loadResults(root).filter((r) => r.polling_station !== stationId);
   results_.push(pkg);
@@ -129,8 +187,8 @@ export function closeMachine(root: string, stationId: string, approvals: string[
   writeFileSync(join(root, 'stations', stationId, 'result.json'), JSON.stringify(pkg, null, 2) + '\n');
   st.status = 'closed';
   saveElection(s, root);
-  audit(root, 'POLL_CLOSED', stationId, st.deviceId, { approvals, reconcile: rec.detail });
-  audit(root, 'RESULT_SIGNED', stationId, st.deviceId, { result_hash: pkg.result_hash });
+  audit(root, 'POLL_CLOSED', stationId, st.deviceId, { approvals, reconcile: rec.detail, endorsers }, devicePriv);
+  audit(root, 'RESULT_SIGNED', stationId, st.deviceId, { result_hash: pkg.result_hash }, devicePriv);
   return pkg;
 }
 

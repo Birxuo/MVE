@@ -1,5 +1,6 @@
 // Polling-station CLI — open / vote / close / status.
 // Usage: node dist/voting/client/src/cli.js <open|vote|close|status> [--station X] ...
+import { readFileSync } from 'node:fs';
 import { DATA_ROOT, castBallot, closeMachine, openMachine } from './machine.js';
 import { loadElection, loadVoters } from '../../../services/election-core/src/store.js';
 
@@ -64,11 +65,19 @@ function main(): void {
   if (c === 'close') {
     const station = str(a, 'station');
     if (!station) {
-      console.error('usage: close --station X --approvals presiding,deputy,observer');
+      console.error('usage: close --station X --approvals presiding,deputy,observer [--endorse officer:sigfile,...]');
       process.exit(2);
     }
+    const endorsements = str(a, 'endorse').split(',').map((x) => x.trim()).filter(Boolean).map((pair) => {
+      const i = pair.indexOf(':');
+      if (i === -1) {
+        console.error(`bad --endorse entry ${pair} (want officer:sigfile)`);
+        process.exit(2);
+      }
+      return { officer: pair.slice(0, i), signature: readFileSync(pair.slice(i + 1), 'utf8') };
+    });
     try {
-      const pkg = closeMachine(root, station, approvalsOf(a));
+      const pkg = closeMachine(root, station, approvalsOf(a), { endorsements });
       console.log(`${station} closed. Counted ${pkg.ballots_counted}, hash ${String(pkg.result_hash).slice(0, 12)}...`);
     } catch (e) {
       console.error(`CLOSE REFUSED: ${(e as Error).message}`);

@@ -17,6 +17,7 @@
     "manage": "npm run build && node dist/services/election-core/src/cli.js",
     "transparency": "npm run build && node dist/services/transparency/src/cli.js",
     "incidents": "npm run build && node dist/services/incidents/src/cli.js",
+    "transmission": "npm run build && node dist/services/transmission/src/cli.js",
     "station": "npm run build && node dist/voting/client/src/cli.js",
     "verify-paper": "npm run build && node dist/voting/verification/src/check.js",
     "portal": "npm run build && node dist/apps/public-portal/src/server.js",

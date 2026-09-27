@@ -2,7 +2,7 @@
 import { EligibilityService } from '../../services/eligibility/src/index.js';
 import { BallotService } from '../../services/ballot/src/index.js';
 import { generateDeviceKeys, signResult, tally } from '../../services/results/src/index.js';
-import { AuditLog, reconcile, sampleStations, flagAnomalies } from '../../services/audit/src/index.js';
+import { AuditLog, analyzeTelemetry, reconcile, sampleStations } from '../../services/audit/src/index.js';
 import { toPublic, toCSV } from '../../services/transparency/src/index.js';
 import { participationReceipt } from '../../services/election-core/src/crypto-utils.js';
 import { ensureDataDirs, loadIncidents, saveBallots, saveElection, saveEvents, saveIncidents, saveResults, saveVoters } from '../../services/election-core/src/store.js';
@@ -103,11 +103,35 @@ const sampled = sampleStations(stationIds, Math.max(2, Math.ceil(N_STATIONS * 0.
 console.log(`Simulated ${N_STATIONS} stations, ${VOTERS_PER} voters each (90% turnout model)`);
 console.log(`RLA sample (${sampled.length}): ${sampled.join(', ')}`);
 
-// Anomaly flags for HUMAN review — never auto-fraud. --anomalies injects one 99% turnout station.
+// Multi-signal anomaly analysis for HUMAN review — never auto-fraud.
+// --anomalies injects one 99% turnout station; telemetry otherwise comes from
+// the audit log itself (open durations, result delays, exceptions, reopens)
+// plus recount status (ESCALATED stations).
 const INJECT = args['anomalies'] === true || String(args['anomalies'] ?? '') === '1';
-const anomalies = flagAnomalies(stationIds.map((id, i) => ({
-  id, turnoutPct: INJECT && i === 0 ? 99.2 : 54 + rand() * 5, invalidPct: 0.5,
-})));
+const events = audit.all();
+const tsOf = (type: string, id: string, nth = 0): number => {
+  const hits = events.filter((e) => e.type === type && e.stationId === id);
+  return hits.length > nth ? Date.parse(hits[nth].ts) : NaN;
+};
+const anomalies = analyzeTelemetry(stationIds.map((id, i) => {
+  // Election-day model: polls run ~10-12h, results follow within the hour.
+  // (Audit timestamps are sim-time, so durations are modeled, not measured.)
+  const signed = tsOf('RESULT_SIGNED', id);
+  const closed = tsOf('POLL_CLOSED', id);
+  const opens = events.filter((e) => e.type === 'POLL_OPENED' && e.stationId === id).length;
+  return {
+    id,
+    turnoutPct: INJECT && i === 0 ? 99.2 : 54 + rand() * 5,
+    invalidPct: 0.5,
+    openMinutes: 600 + Math.floor(rand() * 120),
+    resultDelayMinutes: !Number.isNaN(closed) && !Number.isNaN(signed)
+      ? Math.min(60, Math.max(0, Math.round((signed - closed) / 60000)) + 5)
+      : 10,
+    exceptionCount: events.filter((e) => e.type === 'RESULT_EXCEPTION' && e.stationId === id).length,
+    reopenCount: Math.max(0, opens - 1),
+    recountMismatch: audits.get(id) === 'ESCALATED',
+  };
+}));
 console.log(anomalies.length ? `Flags: ${JSON.stringify(anomalies)}` : 'No anomalies flagged.');
 console.log(`Audit chain ok: ${audit.verifyChain().ok}`);
 

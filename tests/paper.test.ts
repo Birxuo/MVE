@@ -6,11 +6,12 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 import {
-  ensureDataDirs, loadBallots, loadEvents, loadResults, loadVoters,
+  ensureDataDirs, loadBallots, loadElection, loadEvents, loadResults, loadVoters,
   saveElection, saveResults, saveVoters,
 } from '../services/election-core/src/store.js';
-import { castBallot, closeMachine, openMachine, paperDir } from '../voting/client/src/machine.js';
+import { castBallot, closeMachine, endorsementDigest, openMachine, paperDir } from '../voting/client/src/machine.js';
 
 const FW = 'sha256:test-fw';
 
@@ -143,8 +144,7 @@ describe('paper: no voter↔ballot linkage persisted', () => {
   });
 });
 
-describe('paper: bulk simulator output stays separated', () => {
-  it('2-station --paper run: voting+paper hold no voter IDs, identity holds no ballot data', () => {
+describe('paper: bulk simulator output stays separated', () => {  it('2-station --paper run: voting+paper hold no voter IDs, identity holds no ballot data', () => {
     const root = tmp();
     const run = spawnSync(process.execPath, [
       join(process.cwd(), 'dist/research/simulations/simulate.js'),
@@ -162,6 +162,48 @@ describe('paper: bulk simulator output stays separated', () => {
     for (const text of allText(root, 'identity')) {
       assert.doesNotMatch(text, /ballotId|choiceId|party_a|party_b|party_c/);
     }
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('paper: officer endorsement (dual control)', () => {
+  it('close refuses without endorsement once officer keys exist; valid endorsement closes', () => {
+    const root = tmp();
+    seed(root, ['V1']);
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const privPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+    const s = loadElection(root);
+    s.officers.push({
+      id: 'OFF-1', stationId: 'S1', role: 'presiding',
+      pubkeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    });
+    saveElection(s, root);
+
+    openMachine(root, 'S1', FW, ['presiding', 'observer']);
+    castBallot(root, 'S1', 'V1', 'party_a');
+    assert.throws(
+      () => closeMachine(root, 'S1', ['presiding', 'deputy', 'observer']),
+      /dual control/,
+    );
+    assert.equal(loadResults(root).length, 0);
+    // Wrong-hash endorsement is ignored → still refused.
+    assert.throws(
+      () => closeMachine(root, 'S1', ['presiding', 'deputy', 'observer'], {
+        endorsements: [{ officer: 'OFF-1', signature: '00'.repeat(64) }],
+      }),
+      /dual control/,
+    );
+    // Endorse the exact tally digest, then close.
+    const digest = endorsementDigest({
+      election: 'E1', polling_station: 'S1', device: 'M-001',
+      ballots_issued: 1, ballots_counted: 1, invalid_ballots: 0,
+      results: { party_a: 1 }, firmware_hash: FW,
+    });
+    const sig = sign(null, Buffer.from(digest, 'hex'), createPrivateKey(privPem)).toString('hex');
+    const pkg = closeMachine(root, 'S1', ['presiding', 'deputy', 'observer'], {
+      endorsements: [{ officer: 'OFF-1', signature: sig }],
+    });
+    assert.equal(pkg.ballots_counted, 1);
     rmSync(root, { recursive: true, force: true });
   });
 });

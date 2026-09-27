@@ -16,6 +16,7 @@ export const STORES = {
   audit: 'audit/events.json',
   transparency: 'transparency/results.json',
   incidents: 'incidents/incidents.json',
+  ledger: 'transparency/ledger.json',
 } as const;
 
 export interface ElectionStore {
@@ -97,4 +98,12 @@ export function loadIncidents(root = DATA_ROOT): Incident[] {
 
 export function saveIncidents(list: Incident[], root = DATA_ROOT): void {
   writeJson(STORES.incidents, list, root);
+}
+
+export function loadLedger<T = unknown>(root = DATA_ROOT): T[] {
+  return readJson<T[]>(STORES.ledger, [], root);
+}
+
+export function saveLedger(chain: unknown, root = DATA_ROOT): void {
+  writeJson(STORES.ledger, chain, root);
 }

@@ -22,7 +22,12 @@ DEFERRED = consciously postponed per FULL_PLAN.md.
 1. **Ephemeral device keys.** `generateDeviceKeys` creates keys in-memory per run; no certificate chain, no HSM/TPM, no key ceremony (FULL_PLAN §5). GAP — `verify --pubkey` only works when the operator persists the key out-of-band.
 2. **No firmware attestation.** `firmware_hash` is a asserted string, not measured boot. GAP — procedural only.
 3. **V1 ballot privacy is structural, not cryptographic.** Separation + single-use tokens + privacy lint; votes are NOT homomorphically encrypted and there are no mixnets/ZK proofs (FULL_PLAN §§27–28, correctly DEFERRED).
-4. **Audit log signatures absent.** Events are hash-chained but `signature` field is unsigned in V1. GAP if logs leave the station.
+4. **Audit log signatures: PARTIALLY CLOSED.** `AuditLog` supports Ed25519
+   per-event signatures (`signEvent`/`verifyEventChain`), the polling booth
+   signs all file events with its device key, and `transparency audit-verify`
+   checks hashes + signatures against station pubkeys. Remaining: management and
+   incident CLIs have no device keys and stay hash-chained only; independent
+   replica storage is `fork()` + re-verify (no live replication protocol).
 5. **Receipts are demonstrative.** `participationReceipt` proves inclusion only if the ballot store is honest; no blind-signature / commitment scheme yet. GAP for anti-coercion claims beyond "no proof of choice exists".
 
 ## Verdict

@@ -33,8 +33,16 @@ npm run failures -- --only tamper         # single scenario
 npm run recover                            # DR drill: rebuild aggregate from station copies
 npm run station -- open --station X --approvals presiding,observer
 npm run station -- vote --station X --voter V --choice party_a
-npm run station -- close --station X --approvals presiding,deputy,observer
-npm run verify-paper [--station X] [--sample N]   # paper↔electronic↔published recount
+npm run station -- close --station X --approvals presiding,deputy,observer [--endorse OFF-1:sig.hex]
+npm run verify-paper [--station X] [--sample N] [--ceremony HEX]   # paper↔electronic↔published recount
+npm run manage -- officer-keygen --officer OFF-1 --station X       # officer key (SIM ONLY: privkey printed once)
+npm run manage -- officer-sign --key off.pem --hash DIGEST         # endorse tally digest from close refusal
+npm run transmission -- terminal-init --national national
+npm run transmission -- export --station X --terminal-pub terminal.pub.pem --out X.mvepkg
+npm run transmission -- import --file X.mvepkg --national national
+npm run transparency -- ledger-append && npm run transparency -- ledger-verify
+npm run transparency -- ledger-proof --station X
+npm run transparency -- audit-verify                               # file chain hashes + device signatures
 ```
 
 ## What runs

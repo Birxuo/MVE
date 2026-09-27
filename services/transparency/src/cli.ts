@@ -4,8 +4,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createPublicKey, verify } from 'node:crypto';
 import { canonical, sha256Hex } from '../../election-core/src/crypto-utils.js';
-import { loadElection, loadEvents, loadIncidents, loadResults } from '../../election-core/src/store.js';
+import { loadElection, loadEvents, loadIncidents, loadLedger, loadResults, saveLedger } from '../../election-core/src/store.js';
 import { summarize } from '../../incidents/src/index.js';
+import { appendCheckpoint, inclusionProof, verifyLedger, verifyProof, type LedgerCheckpoint } from './ledger.js';
 import { csvField, toCSV, toDatasetCSV, toPublic } from './index.js';
 
 function args(): Record<string, string | true> {
@@ -27,7 +28,7 @@ function args(): Record<string, string | true> {
   return out;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const a = args();
   const root = typeof a['data'] === 'string' ? String(a['data']) : 'data';
   const c = process.argv[2] ?? 'results';
@@ -127,6 +128,73 @@ function main(): void {
     return;
   }
 
+  if (c === 'audit-verify') {
+    const { verifyEventChain } = await import('../../../services/audit/src/index.js');
+    const { existsSync: ex, readFileSync: rf, readdirSync: rd } = await import('node:fs');
+    const { join: jp } = await import('node:path');
+    const events = loadEvents(root);
+    const verifiers = new Map<string, string>();
+    const sdir = jp(root, 'stations');
+    if (ex(sdir)) {
+      for (const sid of rd(sdir)) {
+        const pub = jp(sdir, sid, 'device.pub.pem');
+        if (ex(pub)) {
+          try {
+            const rec = JSON.parse(rf(jp(sdir, sid, 'device.json'), 'utf8'));
+            verifiers.set(rec.deviceId, rf(pub, 'utf8'));
+          } catch { /* unbound device dir — skip */ }
+        }
+      }
+    }
+    const v = verifyEventChain(events, verifiers);
+    const signed = events.filter((e) => e.signature).length;
+    console.log(v.ok
+      ? `audit chain OK (${events.length} events, ${signed} signed, ${verifiers.size} device keys)`
+      : `AUDIT CHAIN BROKEN at seq ${v.badSeq}`);
+    process.exit(v.ok ? 0 : 3);
+    return;
+  }
+
+  if (c === 'ledger-append') {
+    const chain = loadLedger<LedgerCheckpoint>(root);
+    const cp = appendCheckpoint(chain, results);
+    chain.push(cp);
+    saveLedger(chain, root);
+    console.log(`checkpoint #${cp.seq}: ${cp.leaves.length} leaves, root ${cp.root.slice(0, 16)}...`);
+    return;
+  }
+
+  if (c === 'ledger-verify') {
+    const chain = loadLedger<LedgerCheckpoint>(root);
+    if (!chain.length) {
+      console.error('ledger empty (run ledger-append first)');
+      process.exit(1);
+    }
+    const v = verifyLedger(chain);
+    console.log(v.ok ? `ledger OK (${chain.length} checkpoint(s), tip ${chain[chain.length - 1].root.slice(0, 16)}...)` : `LEDGER BROKEN at #${v.badSeq}`);
+    process.exit(v.ok ? 0 : 3);
+    return;
+  }
+
+  if (c === 'ledger-proof') {
+    const st = typeof a['station'] === 'string' ? String(a['station']) : '';
+    const chain = loadLedger<LedgerCheckpoint>(root);
+    if (!st || !chain.length) {
+      console.error('usage: ledger-proof --station X (after ledger-append)');
+      process.exit(2);
+    }
+    const tip = chain[chain.length - 1];
+    const proof = inclusionProof(tip, st);
+    if (!proof) {
+      console.error(`${st} not in checkpoint #${tip.seq}`);
+      process.exit(1);
+    }
+    const ok = verifyProof(proof.leaf, proof.siblings, tip.root);
+    console.log(`${st}: inclusion ${ok ? 'PROVEN' : 'FAILED'} against root ${tip.root.slice(0, 16)}...`);
+    process.exit(ok ? 0 : 3);
+    return;
+  }
+
   if (c === 'observe') {
     const st = typeof a['station'] === 'string' ? String(a['station']) : undefined;
     if (!st) {
@@ -144,8 +212,11 @@ function main(): void {
     return;
   }
 
-  console.error(`unknown command ${c}: use results|verify|export-csv|audit-status|observe`);
+  console.error(`unknown command ${c}: use results|verify|export-csv|export-all|audit-status|audit-verify|observe|ledger-append|ledger-verify|ledger-proof`);
   process.exit(2);
 }
 
-main();
+main().catch((e) => {
+  console.error(`fatal: ${(e as Error).message}`);
+  process.exit(1);
+});

@@ -1,6 +1,8 @@
 // Election management CLI — zero deps. Usage: node dist/services/election-core/src/cli.js <cmd> [--k v]
 // Commands: init-election, add-district, add-station, add-candidate, register-voters,
-//   open-station, close-station, seed-demo, status
+//   open-station, close-station, officer-keygen, officer-sign, seed-demo, status
+import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { canonical, sha256Hex } from './crypto-utils.js';
 import {
   DATA_ROOT, ensureDataDirs, loadElection, loadEvents, loadResults, loadVoters,
@@ -34,6 +36,11 @@ function req(a: Record<string, string | true>, k: string): string {
     process.exit(2);
   }
   return String(v);
+}
+
+function str(a: Record<string, string | true>, k: string, fallback = ''): string {
+  const v = a[k];
+  return v === undefined || v === true ? fallback : String(v);
 }
 
 function appendEvent(
@@ -176,6 +183,33 @@ function main(): void {
     saveElection(s, root);
     saveVoters(voters, root);
     console.log(`seeded ${nStations} stations x ${nVoters} voters`);
+    return;
+  }
+
+  if (c === 'officer-keygen') {
+    const id = req(a, 'officer');
+    const station = str(a, 'station', '');
+    const role = str(a, 'role', 'presiding');
+    if (!['presiding', 'deputy', 'observer'].includes(role)) throw new Error(`bad role ${role}`);
+    const s = loadElection(root);
+    let off = s.officers.find((x) => x.id === id);
+    if (!off) {
+      off = { id, stationId: station, role: role as 'presiding' | 'deputy' | 'observer' };
+      s.officers.push(off);
+    }
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    off.pubkeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    saveElection(s, root);
+    console.log(`officer ${id} registered. PRIVATE KEY BELOW — SIMULATION ONLY, store offline:`);
+    console.log(privateKey.export({ type: 'pkcs8', format: 'pem' }).toString());
+    return;
+  }
+
+  if (c === 'officer-sign') {
+    const keyFile = req(a, 'key');
+    const hash = req(a, 'hash');
+    const sig = sign(null, Buffer.from(hash, 'hex'), createPrivateKey(readFileSync(keyFile, 'utf8')));
+    console.log(sig.toString('hex'));
     return;
   }
 

@@ -6,7 +6,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_ROOT, loadBallots, loadElection, loadResults } from '../../../services/election-core/src/store.js';
-import { sampleStations } from '../../../services/audit/src/index.js';
+import { sampleStations, seedFromCeremony } from '../../../services/audit/src/index.js';
 import type { Ballot, ResultPackage } from '../../../services/election-core/src/types.js';
 import type { PaperSlip } from '../../client/src/machine.js';
 
@@ -19,7 +19,9 @@ function arg(key: string, fallback: string): string {
 const ROOT = arg('data', DATA_ROOT);
 const ONLY = arg('station', '');
 const SAMPLE_N = Number(arg('sample', '0'));
-const SEED = Number(arg('seed', '20260923'));
+const SEED_ARG = arg('seed', '20260923');
+const CEREMONY = arg('ceremony', '');
+const SEED = CEREMONY ? seedFromCeremony(CEREMONY) : Number(SEED_ARG);
 
 function readSlips(root: string, stationId: string): PaperSlip[] {
   const dir = join(root, 'paper', stationId);
