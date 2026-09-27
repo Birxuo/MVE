@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { DATA_ROOT, castBallot, closeMachine, openMachine } from './machine.js';
 import { loadElection, loadVoters } from '../../../services/election-core/src/store.js';
+import { resolveLocale, t, type Locale } from '../../../services/election-core/src/i18n.js';
 
 function args(): Record<string, string | true> {
   const out: Record<string, string | true> = {};
@@ -30,16 +31,17 @@ function main(): void {
   const a = args();
   const root = str(a, 'data', DATA_ROOT) || DATA_ROOT;
   const c = process.argv[2] ?? 'status';
+  const lang: Locale = resolveLocale(a['lang']);
 
   if (c === 'open') {
     const station = str(a, 'station');
     const firmware = str(a, 'firmware', 'sha256:sim-firmware-v1');
     if (!station) {
-      console.error('usage: open --station X [--firmware H] --approvals presiding,observer');
+      console.error(t(lang, 'usage.open'));
       process.exit(2);
     }
     openMachine(root, station, firmware, approvalsOf(a));
-    console.log(`${station} opened`);
+    console.log(t(lang, 'station.opened', { station }));
     return;
   }
 
@@ -48,15 +50,15 @@ function main(): void {
     const voter = str(a, 'voter');
     const choice = str(a, 'choice');
     if (!station || !voter || !choice) {
-      console.error('usage: vote --station X --voter V --choice C [--spoil]');
+      console.error(t(lang, 'usage.vote'));
       process.exit(2);
     }
     const confirm = str(a, 'spoil') ? false : true;
     try {
       const { ballotId, receipt } = castBallot(root, station, voter, choice, confirm);
-      console.log(`ballot ${ballotId} deposited. Participation receipt: ${receipt} (keeps no record of your choice)`);
+      console.log(t(lang, 'vote.deposited', { id: ballotId, receipt }));
     } catch (e) {
-      console.error(`SPOILED: ${(e as Error).message}`);
+      console.error(t(lang, 'vote.spoiled', { msg: (e as Error).message }));
       process.exit(4);
     }
     return;
@@ -65,22 +67,22 @@ function main(): void {
   if (c === 'close') {
     const station = str(a, 'station');
     if (!station) {
-      console.error('usage: close --station X --approvals presiding,deputy,observer [--endorse officer:sigfile,...]');
+      console.error(t(lang, 'usage.close'));
       process.exit(2);
     }
     const endorsements = str(a, 'endorse').split(',').map((x) => x.trim()).filter(Boolean).map((pair) => {
       const i = pair.indexOf(':');
       if (i === -1) {
-        console.error(`bad --endorse entry ${pair} (want officer:sigfile)`);
+        console.error(t(lang, 'err.badEndorse', { entry: pair }));
         process.exit(2);
       }
       return { officer: pair.slice(0, i), signature: readFileSync(pair.slice(i + 1), 'utf8') };
     });
     try {
       const pkg = closeMachine(root, station, approvalsOf(a), { endorsements });
-      console.log(`${station} closed. Counted ${pkg.ballots_counted}, hash ${String(pkg.result_hash).slice(0, 12)}...`);
+      console.log(t(lang, 'station.closed', { station, n: pkg.ballots_counted, h: String(pkg.result_hash).slice(0, 12) }));
     } catch (e) {
-      console.error(`CLOSE REFUSED: ${(e as Error).message}`);
+      console.error(t(lang, 'close.refused', { msg: (e as Error).message }));
       process.exit(3);
     }
     return;

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MVE — Observer Portal</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border: 1px solid #ccc; padding: .35rem .5rem; text-align: left; font-size: .85rem; }
+  form { margin-top: 2rem; border: 1px solid #ccc; padding: 1rem; }
+  label { display: block; margin: .5rem 0; }
+  textarea { width: 100%; height: 4rem; }
+  code { font-size: .8rem; }
+</style>
+</head>
+<body>
+<h1>Observer Portal</h1>
+<p><strong>Accredited observers only (research prototype).</strong>
+   Reports enter a review workflow — they never change results.</p>
+<label>Station: <select id="station"></select></label>
+<h2>Event timeline</h2>
+<table><thead><tr><th>#</th><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody id="events"></tbody></table>
+<h2>Incidents</h2>
+<table><thead><tr><th>ID</th><th>Category</th><th>Status</th><th>Time</th></tr></thead><tbody id="incidents"></tbody></table>
+<h2>File a report</h2>
+<form id="report">
+  <label>Observer ID: <input id="reporter" required maxlength="120"></label>
+  <label>Category:
+    <select id="category">
+      <option>voting-equipment</option><option>ballot-issue</option>
+      <option>counting-discrepancy</option><option>unauthorized-access</option>
+      <option>intimidation</option><option>procedural-violation</option>
+      <option>accessibility-issue</option><option>network-failure</option>
+      <option>power-failure</option><option>other</option>
+    </select></label>
+  <label>Description: <textarea id="description" required maxlength="2000"></textarea></label>
+  <label>Evidence (png/jpg/pdf/txt, ≤1MB total): <input type="file" id="files" multiple></label>
+  <button>Submit report</button>
+  <p id="out"></p>
+</form>
+<script>
+(function () {
+  function j(p, opts) { return fetch(p, opts).then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); }); }
+  function sha256(buf) { return crypto.subtle.digest('SHA-256', buf).then(function (h) {
+    return Array.from(new Uint8Array(h)).map(function (x) { return x.toString(16).padStart(2, '0'); }).join(''); }); }
+  var stationSel = document.getElementById('station');
+  j('/api/stations').then(function (r) {
+    stationSel.innerHTML = r.body.map(function (s) { return '<option>' + s.id + '</option>'; }).join('');
+    load();
+  });
+  stationSel.onchange = load;
+  function load() {
+    var id = stationSel.value;
+    j('/api/stations/' + encodeURIComponent(id) + '/events').then(function (r) {
+      document.getElementById('events').innerHTML = r.body.map(function (e) {
+        return '<tr><td>' + e.seq + '</td><td><code>' + e.ts + '</code></td><td>' + e.type + '</td><td><code>' +
+          JSON.stringify(e.payload).slice(0, 120) + '</code></td></tr>'; }).join('');
+    });
+    j('/api/stations/' + encodeURIComponent(id) + '/incidents').then(function (r) {
+      document.getElementById('incidents').innerHTML = r.body.map(function (x) {
+        return '<tr><td>' + x.id + '</td><td>' + x.category + '</td><td>' + x.status + '</td><td><code>' + x.ts + '</code></td></tr>'; }).join('');
+    });
+  }
+  document.getElementById('report').onsubmit = function (ev) {
+    ev.preventDefault();
+    var files = Array.from(document.getElementById('files').files);
+    Promise.all(files.map(function (f) { return f.arrayBuffer().then(function (buf) {
+      return sha256(buf).then(function (h) {
+        var bin = '', bytes = new Uint8Array(buf);
+        for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return { name: f.name, mime: f.type || 'text/plain', sha256: h, contentBase64: btoa(bin) };
+      });
+    }); })).then(function (evidence) {
+      return j('/api/reports', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ station: stationSel.value,
+          reporter: document.getElementById('reporter').value,
+          category: document.getElementById('category').value,
+          description: document.getElementById('description').value, evidence: evidence }) });
+    }).then(function (r) {
+      document.getElementById('out').textContent =
+        r.status === 201 ? 'Filed as ' + r.body.id : 'Rejected: ' + JSON.stringify(r.body);
+      load();
+    });
+  };
+})();
+</script>
+</body>
+</html>

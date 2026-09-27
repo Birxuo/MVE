@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createPublicKey, verify } from 'node:crypto';
 import { canonical, sha256Hex } from '../../election-core/src/crypto-utils.js';
+import { resolveLocale, t } from '../../election-core/src/i18n.js';
 import { loadElection, loadEvents, loadIncidents, loadLedger, loadResults, saveLedger } from '../../election-core/src/store.js';
 import { summarize } from '../../incidents/src/index.js';
 import { appendCheckpoint, inclusionProof, verifyLedger, verifyProof, type LedgerCheckpoint } from './ledger.js';
@@ -62,7 +63,8 @@ async function main(): Promise<void> {
       }
       const ok = hashOk && sigOk !== false;
       allOk &&= ok;
-      console.log(`${r.polling_station}: hash=${hashOk ? 'OK' : 'FAIL'} sig=${sigOk} ${ok ? 'VALID' : 'INVALID'}`);
+      const lang = resolveLocale(a['lang']);
+      console.log(`${r.polling_station}: hash=${hashOk ? 'OK' : 'FAIL'} sig=${sigOk} ${ok ? t(lang, 'verify.valid') : t(lang, 'verify.invalid')}`);
     }
     process.exit(allOk ? 0 : 3);
     return;

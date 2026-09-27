@@ -23,6 +23,7 @@ npm run transparency -- verify          # hash check (sig when --pubkey given)
 npm run transparency -- export-csv --out results.csv
 npm run transparency -- export-all --dir open-data   # §42 dataset: results/stations/districts/audit-results/incidents
 npm run portal -- --port 8080                        # read-only HTTP API (GET-only, localhost) + static homepage
+npm run observer -- --port 8081                      # observer portal: timelines, incidents, evidence reports
 node apps/verification/verify-bundle.js --dir open-data   # independent check from CSVs alone (docs/verification/reproduce.md)
 npm run transparency -- observe --station TANGER-ASilah-0001  # observer view
 npm run incidents -- report --station TANGER-ASilah-0001 --category ballot-issue --description "..."
@@ -62,6 +63,7 @@ Tamper demo covered in tests: `201→301` breaks `result_hash` verification.
 - `services/audit/` hash-chain, reconcile, RLA sampler, anomaly flags
 - `services/transparency/` public view + CSV + `observe`
 - `services/incidents/` report → triage → resolve workflow (metadata only)
-- `voting/client/` polling-station machine: open (firmware gate, 2-sig) → vote (slip) → close (3-sig, reconcile-or-refuse)
+- `voting/client/` polling-station machine: open (firmware gate, 2-sig) → vote (slip) → close (3-sig, reconcile-or-refuse); `--lang ar|zgh|fr|en` (`services/election-core/src/i18n.ts`)
+- `apps/observer-portal/` timelines + evidence-backed reports (`npm run observer`); citizen page + lookup at `/citizen`, `/api/lookup`
 - `voting/verification/` paper↔electronic↔published recount (`research/audits/pilot-200.md`)
 - `docs/` specs: `architecture/election-core.md`, `architecture/management-api.md`, `architecture/observer-incidents.md`, `cryptography/protocol.md`, `security/threat-model.md`, `security/baseline.md`, `security/crypto-review.md`, `security/supply-chain.md`, `architecture/database.md`, `auditing/risk-limiting-audit.md`

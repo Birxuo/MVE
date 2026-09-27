@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MVE — Citizen Services</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  section { border: 1px solid #ccc; padding: 1rem; margin-top: 1rem; }
+  label { display: block; margin: .5rem 0; }
+  input { width: 100%; max-width: 24rem; }
+  code { font-size: .8rem; }
+</style>
+</head>
+<body>
+<h1>Citizen Services</h1>
+<p><strong>Research prototype.</strong> Check your registration, find your station,
+   and verify published results. This page never asks for or shows your vote.</p>
+<section>
+  <h2>1. Check my registration</h2>
+  <label>Reference: <input id="ref" placeholder="voter reference"></label>
+  <button id="lookup">Check</button>
+  <p id="reg"></p>
+</section>
+<section>
+  <h2>2. Check my polling station's result</h2>
+  <label>Station: <input id="station" placeholder="e.g. TANGER-ASilah-0001"></label>
+  <button id="check">Check result + audit</button>
+  <p id="res"></p>
+</section>
+<section>
+  <h2>3. Report an issue</h2>
+  <p>Use the <a id="obs" href="#">observer portal report form</a>
+     (works for citizens too — choose any category, attach evidence).
+     Reports enter review; they never change results by themselves.</p>
+</section>
+<script>
+(function () {
+  function j(p) { return fetch(p).then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); }); }
+  document.getElementById('obs').href = location.protocol + '//' + location.hostname + ':8081/';
+  document.getElementById('lookup').onclick = function () {
+    var ref = document.getElementById('ref').value;
+    j('/api/lookup?reference=' + encodeURIComponent(ref)).then(function (r) {
+      document.getElementById('reg').textContent = r.status === 200
+        ? 'Registered: ' + r.body.district + ' → ' + r.body.stationName + ' (' + r.body.station + '), eligible: ' + r.body.eligible
+        : 'Not found: ' + JSON.stringify(r.body);
+    });
+  };
+  document.getElementById('check').onclick = function () {
+    var st = document.getElementById('station').value;
+    Promise.all([j('/api/results?station=' + encodeURIComponent(st)), j('/api/audits?station=' + encodeURIComponent(st))]).then(function (all) {
+      var r = all[0].body[0], a = all[1].body[0];
+      document.getElementById('res').textContent = r
+        ? 'Counted ' + r.counted + ' (' + Object.keys(r.results).sort().map(function (k) { return k + ' ' + r.results[k]; }).join(', ') +
+          '), hash ' + String(r.result_hash).slice(0, 12) + '…, audit: ' + (a ? a.status : 'PENDING')
+        : 'No published result for this station yet.';
+    });
+  };
+})();
+</script>
+</body>
+</html>

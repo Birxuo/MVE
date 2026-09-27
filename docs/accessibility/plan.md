@@ -16,7 +16,10 @@ all operator prompts are English-only CLI strings — this is a known gap.
 
 ## Roadmap
 
-- [ ] Externalize all strings to locale bundles (`ar`, `zgh`, `fr`, `en` kept for docs).
+- [x] Externalize station-CLI strings (`services/election-core/src/i18n.ts`:
+      `en`/`ar`/`fr`/`zgh`, `--lang` flag + `MVE_LANG` env; `tests/i18n.test.ts`
+      enforces key parity). zgh bundle is provisional — native review required.
+- [ ] Extend bundles to `manage`/`transparency`/`incidents` operator strings.
 - [ ] Voter-facing print: slip + receipt text in the voter's language; receipt
       must stay choice-free in every language (privacy lint extends to bundles).
 - [ ] Non-visual access: audio confirmation of slip contents before deposit;

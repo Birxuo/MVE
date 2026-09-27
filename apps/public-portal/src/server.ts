@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonical, sha256Hex } from '../../../services/election-core/src/crypto-utils.js';
 import { loadElection, loadEvents, loadIncidents, loadResults } from '../../../services/election-core/src/store.js';
+import { lookupRegistration } from '../../../services/eligibility/src/lookup.js';
 import { toPublic } from '../../../services/transparency/src/index.js';
 
 const STRIP_KEYS = [/voterid/i, /tokenhash/i, /\bcin\b/i, /private/i, /voter_id/i];
@@ -101,21 +102,38 @@ function route(root: string, method: string, url: string): { code: number; body:
         }),
       };
     }
+    case 'lookup': {
+      // Citizen self-check: registration + polling station. Returns district,
+      // station, and eligibility ONLY — never choices, tokens, or other voters.
+      // Prototype uses the local voter ID as the lookup reference; a production
+      // system needs rate-limited, privacy-reviewed identification (see
+      // docs/elections/citizen-intake.md).
+      const ref = u.searchParams.get('reference');
+      if (!ref) return { code: 400, body: { error: 'missing ?reference=' } };
+      const found = lookupRegistration(root, ref);
+      if (!found) return { code: 404, body: { error: 'not registered' } };
+      return { code: 200, body: found };
+    }
     default:
       return { code: 404, body: { error: 'not found' } };
   }
 }
 
 export function startServer(root: string, port: number, host: string): Server {
-  const page = join(process.cwd(), 'apps/public-portal/index.html');
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     try {
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-      if ((req.method ?? 'GET') === 'GET' && (pathname === '/' || pathname === '/index.html') && existsSync(page)) {
-        const html = readFileSync(page, 'utf8');
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) });
-        res.end(html);
-        return;
+      for (const page of ['/', '/index.html', '/citizen', '/citizen.html']) {
+        if ((req.method ?? 'GET') === 'GET' && pathname === page) {
+          const file = join(process.cwd(), 'apps/public-portal',
+            page === '/' || page === '/index.html' ? 'index.html' : 'citizen.html');
+          if (existsSync(file)) {
+            const html = readFileSync(file, 'utf8');
+            res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) });
+            res.end(html);
+            return;
+          }
+        }
       }
       const { code, body } = route(root, req.method ?? 'GET', req.url ?? '/');
       send(res, code, sanitize(body));

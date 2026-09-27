@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { startServer } from '../apps/public-portal/src/server.js';
 import {
-  ensureDataDirs, saveElection, saveEvents, saveIncidents, saveResults,
+  ensureDataDirs, saveElection, saveEvents, saveIncidents, saveResults, saveVoters,
 } from '../services/election-core/src/store.js';
 import { generateDeviceKeys, signResult } from '../services/results/src/index.js';
 import { createIncident } from '../services/incidents/src/index.js';
@@ -15,9 +15,10 @@ import type { Server } from 'node:http';
 
 let server: Server;
 let base: string;
+let root: string;
 
 before(() => {
-  const root = mkdtempSync(join(tmpdir(), 'mve-portal-'));
+  root = mkdtempSync(join(tmpdir(), 'mve-portal-'));
   ensureDataDirs(root);
   saveElection({
     elections: [{ id: 'E1', name: 'E1', date: '2026-09-23', status: 'closed' }],
@@ -104,5 +105,25 @@ describe('portal: endpoint matrix', () => {
     assert.equal(r.status, 200);
     assert.match(r.headers.get('content-type') ?? '', /text\/html/);
     assert.match(r.body, /Public Transparency/);
+  });
+
+  it('citizen lookup returns district/station/eligibility only', async () => {
+    saveVoters([{ voterId: 'CIT-1', districtId: 'D1', stationId: 'S1', eligible: true, status: 'NOT_VOTED' }], root);
+    const ok = await get('/api/lookup?reference=CIT-1');
+    assert.equal(ok.status, 200);
+    const body = JSON.parse(ok.body);
+    assert.deepEqual(body, {
+      registered: true, district: 'D1', station: 'S1', stationName: 'S1', eligible: true,
+    });
+    assert.doesNotMatch(ok.body, /voterId|party_a|token/i);
+    assert.equal((await get('/api/lookup?reference=GHOST')).status, 404);
+    assert.equal((await get('/api/lookup')).status, 400);
+  });
+
+  it('serves the citizen page as HTML', async () => {
+    const r = await get('/citizen');
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(r.body, /Check my registration/);
   });
 });
