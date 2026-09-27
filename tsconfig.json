@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["services/*/src/**/*.ts", "voting/*/src/**/*.ts", "research/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
+  "include": ["services/*/src/**/*.ts", "voting/*/src/**/*.ts", "apps/*/src/**/*.ts", "research/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }

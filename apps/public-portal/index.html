@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MVE — Public Election Transparency</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  .bar { background: #eee; height: 1.2rem; border-radius: 4px; overflow: hidden; }
+  .bar > div { background: #2a7; height: 100%; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border: 1px solid #ccc; padding: .35rem .5rem; text-align: left; font-size: .9rem; }
+  .ok { color: #1a7; } .bad { color: #c33; }
+  code { font-size: .8rem; }
+</style>
+</head>
+<body>
+<h1>Morocco Verifiable Elections — Public Transparency</h1>
+<p><strong>Research prototype. Not an official election source.</strong>
+   Data: read-only public API (<a href="/api/">/api/</a>). No voter information is published here.</p>
+<h2 id="summary">Loading…</h2>
+<div class="bar"><div id="bar" style="width:0%"></div></div>
+<table>
+  <thead><tr><th>Station</th><th>Counted</th><th>Results</th><th>Hash</th><th>Audit</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<script>
+(function () {
+  function j(p) { return fetch(p).then(function (r) { return r.json(); }); }
+  Promise.all([j('/api/results'), j('/api/audits')]).then(function (all) {
+    var results = all[0], audits = all[1];
+    var auditBy = {};
+    audits.forEach(function (a) { auditBy[a.station] = a.status; });
+    var counted = results.reduce(function (n, r) { return n + r.counted; }, 0);
+    var verified = results.length;
+    document.getElementById('summary').textContent =
+      counted + ' ballots counted · ' + verified + ' stations reporting · ' +
+      results.filter(function (r) { return (auditBy[r.station] || 'PENDING') === 'PASSED'; }).length + ' audits passed';
+    document.getElementById('bar').style.width = '100%';
+    document.getElementById('rows').innerHTML = results.map(function (r) {
+      var st = auditBy[r.station] || 'PENDING';
+      var cls = st === 'PASSED' ? 'ok' : (st === 'ESCALATED' ? 'bad' : '');
+      var res = Object.keys(r.results).sort().map(function (k) { return k + ' ' + r.results[k]; }).join(' · ');
+      return '<tr><td>' + r.station + '</td><td>' + r.counted + '</td><td>' + res +
+        '</td><td><code>' + String(r.result_hash).slice(0, 12) + '…</code></td>' +
+        '<td class="' + cls + '">' + st + '</td></tr>';
+    }).join('');
+  }).catch(function () {
+    document.getElementById('summary').textContent = 'No data yet — run a simulation first.';
+  });
+})();
+</script>
+</body>
+</html>

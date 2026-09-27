@@ -21,6 +21,9 @@ npm run manage -- seed-demo --stations 3 --voters 10   # file-store setup
 npm run manage -- status
 npm run transparency -- verify          # hash check (sig when --pubkey given)
 npm run transparency -- export-csv --out results.csv
+npm run transparency -- export-all --dir open-data   # §42 dataset: results/stations/districts/audit-results/incidents
+npm run portal -- --port 8080                        # read-only HTTP API (GET-only, localhost) + static homepage
+node apps/verification/verify-bundle.js --dir open-data   # independent check from CSVs alone (docs/verification/reproduce.md)
 npm run transparency -- observe --station TANGER-ASilah-0001  # observer view
 npm run incidents -- report --station TANGER-ASilah-0001 --category ballot-issue --description "..."
 npm run incidents -- triage --id INC-0001 --decision investigating --note "..."

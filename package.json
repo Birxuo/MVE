@@ -19,6 +19,7 @@
     "incidents": "npm run build && node dist/services/incidents/src/cli.js",
     "station": "npm run build && node dist/voting/client/src/cli.js",
     "verify-paper": "npm run build && node dist/voting/verification/src/check.js",
+    "portal": "npm run build && node dist/apps/public-portal/src/server.js",
     "lint:privacy": "node scripts/check-privacy.js"
   },
   "devDependencies": {

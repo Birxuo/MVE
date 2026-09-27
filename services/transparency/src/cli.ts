@@ -1,12 +1,12 @@
 // Transparency CLI — public read-only view. Usage:
 //   node dist/services/transparency/src/cli.js <results|verify|export-csv|audit-status|observe> [--station X] [--pubkey file] [--out file] [--data data]
 // `observe` is the observer-portal view: station event chain + result + incident counts. No voter PII.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createPublicKey, verify } from 'node:crypto';
 import { canonical, sha256Hex } from '../../election-core/src/crypto-utils.js';
-import { loadEvents, loadIncidents, loadResults } from '../../election-core/src/store.js';
+import { loadElection, loadEvents, loadIncidents, loadResults } from '../../election-core/src/store.js';
 import { summarize } from '../../incidents/src/index.js';
-import { toCSV, toPublic } from './index.js';
+import { csvField, toCSV, toDatasetCSV, toPublic } from './index.js';
 
 function args(): Record<string, string | true> {
   const out: Record<string, string | true> = {};
@@ -80,6 +80,38 @@ function main(): void {
     } else {
       console.log(csv);
     }
+    return;
+  }
+
+  if (c === 'export-all') {
+    const out = typeof a['dir'] === 'string' ? String(a['dir']) : 'open-data';
+    mkdirSync(out, { recursive: true });
+    const election = loadElection(root);
+    const audits = new Map<string, string>();
+    for (const e of loadEvents(root)) {
+      if (e.type === 'POLL_CLOSED') audits.set(e.stationId, 'PASSED');
+      if (e.type === 'RESULT_SIGNED' && !audits.has(e.stationId)) audits.set(e.stationId, 'PASSED');
+    }
+    const pub = toPublic(results, audits);
+    const files: Record<string, string> = {
+      'results.csv': toDatasetCSV(results, audits),
+      'stations.csv': ['station,district,device,registered,status']
+        .concat(election.stations.map((s) => [s.id, s.districtId, s.deviceId, s.registeredVoters, s.status].map(csvField).join(',')))
+        .join('\n'),
+      'districts.csv': ['district,election,seats']
+        .concat(election.districts.map((d) => [d.id, d.electionId, d.seats].map(csvField).join(',')))
+        .join('\n'),
+      'audit-results.csv': ['station,status,result_hash']
+        .concat(pub.map((r) => [r.station, r.audit, r.result_hash].map(csvField).join(',')))
+        .join('\n'),
+      'incidents.csv': ['id,station,category,status,ts,description']
+        .concat(loadIncidents(root).map((x) => [x.id, x.stationId, x.category, x.status, x.ts, x.description].map(csvField).join(',')))
+        .join('\n'),
+    };
+    for (const [name, content] of Object.entries(files)) {
+      writeFileSync(`${out}/${name}`, content + '\n');
+    }
+    console.log(`wrote ${Object.keys(files).length} files to ${out}/ (PII-free open dataset)`);
     return;
   }
 

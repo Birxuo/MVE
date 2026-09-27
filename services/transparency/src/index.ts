@@ -27,3 +27,27 @@ export function toCSV(rows: PublicStationResult[]): string {
   }
   return lines.join('\n');
 }
+
+/** CSV-escape one field (quotes, commas, newlines). */
+export function csvField(v: unknown): string {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Full-fidelity dataset CSV (complete hashes/signatures + every hash input field)
+ * for independent reproduction (§42). A third party can rebuild each canonical
+ * package body from a row and recompute result_hash without trusting this repo. */
+export function toDatasetCSV(pkgs: ResultPackage[], audits: Map<string, string>): string {
+  const choices = [...new Set(pkgs.flatMap((p) => Object.keys(p.results)))].sort();
+  const header = ['election', 'station', 'device', 'ballots_issued', 'counted', 'invalid',
+    ...choices, 'timestamp', 'firmware_hash', 'result_hash', 'signature', 'audit'];
+  const lines = [header.join(',')];
+  for (const p of pkgs) {
+    lines.push([p.election, p.polling_station, p.device, p.ballots_issued, p.ballots_counted,
+      p.invalid_ballots, ...choices.map((c) => p.results[c] ?? 0),
+      p.timestamp, p.firmware_hash, p.result_hash ?? '', p.signature ?? '',
+      audits.get(p.polling_station) ?? 'PENDING']
+      .map(csvField).join(','));
+  }
+  return lines.join('\n');
+}

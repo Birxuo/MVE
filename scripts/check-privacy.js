@@ -59,13 +59,19 @@ try {
     }
   }
   // Boundary check: observer/aggregate paths must never read paper slips or the
-  // verification module (paper contains choices by nature).
+  // verification module (paper contains choices by nature). The public portal
+  // may read election/results/events/incidents stores only — never identity
+  // or ballot stores (field-level stripping is tested in tests/portal.test.ts).
   const PAPER_RE = /voting\/verification|data\/paper|paperDir|readSlips/;
   for (const f of files) {
     if (f.startsWith('voting/verification/') || f.startsWith('tests/')) continue;
     const src = stripComments(readFileSync(f, 'utf8'));
     if (/services\/transparency|services\/incidents/.test(f) && PAPER_RE.test(src)) {
       console.error(`PRIVACY VIOLATION ${f}: observer path must not read paper records`);
+      failed = true;
+    }
+    if (/^apps\//.test(f) && /loadVoters|saveVoters|loadBallots|saveBallots|identity\/voters|voting\/ballots/.test(src)) {
+      console.error(`PRIVACY VIOLATION ${f}: public portal must not touch identity or ballot stores`);
       failed = true;
     }
     // machine.ts may loadResults solely to replace its OWN station entry on re-close
