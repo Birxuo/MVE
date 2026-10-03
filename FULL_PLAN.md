@@ -4,14 +4,6 @@
 
 ---
 
-Yes. If the objective is to modernize Morocco’s elections and reduce opportunities for fraud, vote-buying, intimidation, ballot manipulation, and opaque counting, I would not start by simply replacing paper ballots with an app.
-
-I would design a verifiable national election infrastructure where digital technology makes manipulation harder while preserving a voter-verifiable paper audit trail.
-
-This is especially relevant in Tangier right now: Morocco’s 2026 legislative election was held on 23 September 2026, and reporting this week described a controversy at a polling station in Tangier-Asilah involving an alleged ballot-box irregularity. At the same time, the Ministry of Interior characterized the national process as generally normal apart from isolated incidents. 
-
-Morocco already has important digital pieces: the official electoral-list portal allows citizens to verify registration and polling-office information, and the 2026 election process already used electronic platforms for some administrative procedures. 
-
 1. The system I would build
 
 Call it something like Morocco Verifiable Elections — MVE.
