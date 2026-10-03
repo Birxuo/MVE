@@ -1,7 +1,7 @@
 // Polling-station CLI — open / vote / close / status.
 // Usage: node dist/voting/client/src/cli.js <open|vote|close|status> [--station X] ...
 import { readFileSync } from 'node:fs';
-import { DATA_ROOT, castBallot, closeMachine, openMachine } from './machine.js';
+import { DATA_ROOT, castBallot, closeMachine, openMachine, stationDashboard, type StationDashboard } from './machine.js';
 import { loadElection, loadVoters } from '../../../services/election-core/src/store.js';
 import { resolveLocale, t, type Locale } from '../../../services/election-core/src/i18n.js';
 
@@ -88,15 +88,47 @@ function main(): void {
     return;
   }
 
-  // status (default): station state + authorized/voted counts
+  // status (default): §13 polling-station dashboard; --json keeps machine-readable rows.
   const s = loadElection(root);
-  const voters = loadVoters(root);
   const st = str(a, 'station');
-  const rows = (st ? s.stations.filter((x) => x.id === st) : s.stations).map((x) => ({
-    station: x.id, status: x.status, device: x.deviceId,
-    voted: voters.filter((v) => v.stationId === x.id && v.status === 'VOTED').length,
-  }));
-  console.log(JSON.stringify(rows, null, 2));
+  const ids = st ? [st] : s.stations.map((x) => x.id);
+  if (st && !s.stations.some((x) => x.id === st)) {
+    console.error(t(lang, 'err.missingStation'));
+    process.exit(2);
+  }
+  if (a['json'] === true || String(a['json'] ?? '') === '1') {
+    const voters = loadVoters(root);
+    const rows = ids.map((id) => {
+      const x = s.stations.find((y) => y.id === id)!;
+      return {
+        station: x.id, status: x.status, device: x.deviceId,
+        voted: voters.filter((v) => v.stationId === x.id && v.status === 'VOTED').length,
+      };
+    });
+    console.log(JSON.stringify(rows, null, 2));
+    return;
+  }
+  for (const id of ids) {
+    console.log(renderDashboard(lang, stationDashboard(root, id)));
+  }
+}
+
+function renderDashboard(lang: Locale, d: StationDashboard): string {
+  const v = (key: string): string => t(lang, `dash.v.${key}`);
+  const fw = d.firmware === 'verified' && d.firmwareVersion
+    ? `${v('verified')} (${d.firmwareVersion})`
+    : v(d.firmware);
+  return [
+    t(lang, 'dash.title', { station: d.station, state: t(lang, d.state === 'open' ? 'status.open' : 'status.closed') }),
+    t(lang, 'dash.machine', { v: v(d.machine === 'ready' ? 'ready' : 'notProvisioned') }),
+    t(lang, 'dash.firmware', { v: fw }),
+    t(lang, 'dash.cert', { v: v(d.cert) }),
+    t(lang, 'dash.storage', { v: v(d.storage) }),
+    t(lang, 'dash.network', { v: v('disconnected') }),
+    t(lang, 'dash.observers', { n: d.observers, o: d.officers }),
+    t(lang, 'dash.ballots', { r: d.registered, v: d.voted, e: d.electronic, p: d.paper }),
+    t(lang, 'dash.quorum', { o: d.openApprovals, c: d.closeApprovals }),
+  ].join('\n');
 }
 
 main();

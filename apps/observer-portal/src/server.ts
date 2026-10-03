@@ -9,11 +9,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonical, sha256Hex } from '../../../services/election-core/src/crypto-utils.js';
+import { signEvent } from '../../../services/audit/src/index.js';
 import {
   DATA_ROOT, ensureDataDirs, loadElection, loadEvents, loadIncidents, saveEvents, saveIncidents,
 } from '../../../services/election-core/src/store.js';
 import type { AuditEvent } from '../../../services/election-core/src/types.js';
-import { createIncident, INCIDENT_CATEGORIES } from '../../../services/incidents/src/index.js';
+import { createIncident, INCIDENT_CATEGORIES, resolveAccreditation, scanEvidenceText } from '../../../services/incidents/src/index.js';
 
 const MAX_EVIDENCE_BYTES = 1024 * 1024;
 const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'application/pdf', 'text/plain']);
@@ -44,18 +45,28 @@ function readJsonBody(req: IncomingMessage, limit = MAX_EVIDENCE_BYTES * 2): Pro
   });
 }
 
-function auditIncident(root: string, stationId: string, id: string, category: string): void {
+function auditIncident(root: string, stationId: string, id: string, category: string, accredited: boolean): void {
   const events = loadEvents(root);
   const seq = events.length;
   const ts = new Date().toISOString();
   const prevHash = events.length ? events[events.length - 1].hash : 'GENESIS';
+  // Attribute to the station device when it exists (signed); otherwise 'N/A'
+  // hash-chained only (e.g. pre-open reports before any device key exists).
+  const keyPath = join(root, 'stations', stationId, 'device.priv.pem');
+  const deviceRec = join(root, 'stations', stationId, 'device.json');
+  const deviceId = existsSync(deviceRec)
+    ? (JSON.parse(readFileSync(deviceRec, 'utf8')) as { deviceId?: string }).deviceId ?? 'N/A'
+    : 'N/A';
   const hash = sha256Hex(prevHash + '|' + canonical({
-    seq, ts, type: 'INCIDENT_REPORTED', stationId, deviceId: 'N/A', payload: { id, category },
+    seq, ts, type: 'INCIDENT_REPORTED', stationId, deviceId, payload: { id, category, accredited },
   }));
   const ev: AuditEvent = {
-    seq, ts, type: 'INCIDENT_REPORTED', stationId, deviceId: 'N/A',
-    payload: { id, category }, prevHash, hash,
+    seq, ts, type: 'INCIDENT_REPORTED', stationId, deviceId,
+    payload: { id, category, accredited }, prevHash, hash,
   };
+  if (deviceId !== 'N/A' && existsSync(keyPath)) {
+    ev.signature = signEvent(hash, readFileSync(keyPath, 'utf8'));
+  }
   events.push(ev);
   saveEvents(events, root);
 }
@@ -121,6 +132,7 @@ async function handle(root: string, req: IncomingMessage, res: ServerResponse): 
     const category = String(body.category ?? '');
     const description = String(body.description ?? '');
     const reporter = String(body.reporter ?? 'anonymous').slice(0, 120);
+    const observerId = String(body.observerId ?? '');
     const election = loadElection(root);
     if (!station || !election.stations.some((s) => s.id === station)) {
       send(res, 400, { error: 'unknown station' });
@@ -134,8 +146,11 @@ async function handle(root: string, req: IncomingMessage, res: ServerResponse): 
       send(res, 400, { error: 'description required (max 2000 chars)' });
       return;
     }
+    const accreditation = resolveAccreditation(election.officers, station, observerId);
     const evidence = Array.isArray(body.evidence) ? body.evidence as Record<string, unknown>[] : [];
     const refs: string[] = [];
+    const scanned: string[] = [];
+    const unscanned: string[] = [];
     let total = 0;
     for (const ev of evidence) {
       const name = String(ev.name ?? '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
@@ -154,11 +169,35 @@ async function handle(root: string, req: IncomingMessage, res: ServerResponse): 
         send(res, 400, { error: `sha256 mismatch for ${name}` });
         return;
       }
+      // Redaction check: text evidence is scanned for personal identifiers and
+      // refused on hit; binaries cannot be scanned — accepted, flagged unscanned.
+      if (mime === 'text/plain') {
+        let text: string | null = null;
+        try {
+          const decoded = new TextDecoder('utf-8', { fatal: true }).decode(content);
+          text = decoded;
+        } catch { /* not valid UTF-8 — treat as unscanned binary */ }
+        if (text !== null) {
+          const hits = scanEvidenceText(name, text);
+          if (hits.length) {
+            send(res, 400, { error: `evidence needs redaction: ${hits[0]}` });
+            return;
+          }
+          scanned.push(name);
+        } else {
+          unscanned.push(name);
+        }
+      } else {
+        unscanned.push(name);
+      }
     }
     const list = loadIncidents(root);
     let inc;
     try {
-      inc = createIncident(list, { stationId: station, category, description, reporter });
+      inc = createIncident(list, {
+        stationId: station, category, description, reporter,
+        observerId: accreditation.observerId, accredited: accreditation.accredited,
+      });
     } catch (e) {
       send(res, 400, { error: (e as Error).message });
       return;
@@ -174,8 +213,13 @@ async function handle(root: string, req: IncomingMessage, res: ServerResponse): 
       inc.evidenceRefs = refs;
     }
     saveIncidents(list, root);
-    auditIncident(root, station, inc.id, category);
-    send(res, 201, { id: inc.id, status: inc.status, evidence: refs });
+    auditIncident(root, station, inc.id, category, accreditation.accredited);
+    send(res, 201, {
+      id: inc.id, status: inc.status, evidence: refs,
+      accredited: accreditation.accredited,
+      verification: accreditation.accredited ? 'ACCREDITED' : 'UNVERIFIED',
+      redaction: { scanned, unscanned },
+    });
     return;
   }
 

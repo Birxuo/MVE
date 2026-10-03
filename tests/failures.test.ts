@@ -37,6 +37,27 @@ describe('failures: paper drop → reconcile EXCEPTION', () => {
   });
 });
 
+describe('reconcile accounting (§20: registered/authorized/electronic/paper)', () => {
+  it('512/509/509 + 103 unused reconciles; 512/509/495 trips', () => {
+    const ok = reconcile({ authorized: 512, electronic: 509, paper: 509, registered: 615, invalid: 0 });
+    assert.equal(ok.ok, true);
+    assert.match(ok.detail, /unused=103/);
+    const bad = reconcile({ authorized: 512, electronic: 509, paper: 495, registered: 615, invalid: 0 });
+    assert.equal(bad.ok, false);
+    assert.match(bad.detail, /EXCEPTION/);
+  });
+
+  it('more authorizations than roll trips; invalid above electronic trips', () => {
+    assert.equal(reconcile({ authorized: 700, electronic: 509, paper: 509, registered: 615 }).ok, false);
+    assert.match(
+      reconcile({ authorized: 700, electronic: 509, paper: 509, registered: 615 }).detail,
+      /authorized=700 > registered=615/,
+    );
+    assert.equal(reconcile({ authorized: 512, electronic: 509, paper: 509, invalid: 510 }).ok, false);
+    assert.equal(reconcile({ authorized: 512, electronic: 509, paper: 509, invalid: 2 }).ok, true);
+  });
+});
+
 describe('failures: result tamper → verify FAIL', () => {
   it('+100 votes never verify', () => {
     const { pkg, keys } = honestPackage();

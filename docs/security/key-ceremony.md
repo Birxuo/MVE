@@ -12,14 +12,20 @@ ever holds signing power alone.
 
 ## Ceremony steps
 
-Implemented subset (`manage ceremony|ca-sign-device|revoke-device`,
+Implemented subset (`manage ceremony|combine-shares|ca-sign-device|revoke-device`,
 `voting/client/src/device.ts`, enforced in `openMachine`):
 
 1. **Prepare.** Air-gapped machine, booted from published installer image.
    B verifies `sha256` of the image against the published value; C records it.
 2. **Election root.** Generate the offline election root Ed25519 keypair.
-   Private key splits into 2-of-3 paper shares (one per custodian); the machine
-   is wiped after export. Public key publishes to the transparency ledger.
+   `manage ceremony` Shamir-splits the private key into 2-of-3 share files
+   (`<base>.share-1/2/3.json`, GF(256), `services/election-core/src/shares.ts`);
+   the machine is wiped after export and NO single-key file is written (pass
+   `--single-key` only for migration). `manage ca-sign-device --shares A,B`
+   (or `combine-shares`) reconstructs transiently and refuses to sign unless
+   the derived public key equals the published root in `ca/ca.json`, so one
+   share alone can never certify a device. Public key publishes to the
+   transparency ledger.
 3. **Device keys.** Per polling-station device: generate Ed25519 pair, record
    `device.json` binding (device ↔ station ↔ firmware hash), seal the private
    key to removable media labeled per station. Two custodians co-sign the

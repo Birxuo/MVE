@@ -24,6 +24,30 @@ no token hashes (enforced by `npm run lint:privacy`).
 
 Status transitions append `INCIDENT_*` events to the hash-chained audit log.
 
+## Accreditation (stub, B3)
+
+An `observerId` is **accredited** only if it matches a registered `observer`-role
+officer **for that station** (`resolveAccreditation`). Everything else —
+unknown id, wrong role, wrong station, or no id — resolves to
+`accredited: false`. Unauthenticated reports are still accepted and fully
+usable; they are flagged `UNVERIFIED` in the API response (`/api/incidents`
+carries the flag, never the observer's identity) and in the `INCIDENT_REPORTED`
+audit payload. Accreditation is a triage signal, not a gate: a real deployment
+needs a proper credential-issuance and revocation process.
+
+```bash
+npm run incidents -- report --station X --category ballot-issue --description "..." --observer OBS-7
+```
+
+## Evidence redaction (B3)
+
+Text evidence (`text/plain`) is scanned for personal identifiers (CIN-like
+codes, long digit runs, CIN keywords) and **refused on hit** — redact and
+resubmit. Images/PDFs cannot be scanned here: they are accepted but reported
+as `unscanned` in the response (`redaction: {scanned, unscanned}`), never as
+clean. Binary screening (OCR/PII detection) is deferred; treat unscanned
+evidence as unreviewed for privacy until a human checks it.
+
 ## Commands
 
 ```bash

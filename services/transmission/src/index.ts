@@ -8,7 +8,7 @@ import { createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, di
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonical, sha256Hex } from '../../election-core/src/crypto-utils.js';
-import { DATA_ROOT, ensureDataDirs, loadEvents, loadResults, saveEvents, saveResults } from '../../election-core/src/store.js';
+import { DATA_ROOT, ensureDataDirs, loadEvents, loadImports, loadResults, saveEvents, saveImports, saveResults } from '../../election-core/src/store.js';
 import type { AuditEvent, ResultPackage } from '../../election-core/src/types.js';
 
 export interface TransmissionBundle {
@@ -69,11 +69,20 @@ export function exportStation(root: string, stationId: string, terminalPubPem: s
   }, null, 2) + '\n');
 }
 
-/** Terminal side: open, verify (hash + device signature), merge package.
+/** Terminal side: open, verify (hash + device signature), dedupe, merge package.
  * Station event chains stay authoritative in station stores; the terminal
  * records only a TRANSMISSION_RECEIVED receipt in its own hash-chained log.
- * The national chain is append-only — history is never rewritten. */
-export function importBundle(root: string, pkgPath: string): { station: string; merged: boolean } {
+ * The national chain is append-only — history is never rewritten.
+ * Replay policy (import journal in transmission/imports.json):
+ *   - same bundle file twice → DUPLICATE, refused;
+ *   - same result content re-exported → DUPLICATE, refused;
+ *   - same station, different result, older-or-equal timestamp → STALE, refused;
+ *   - same station, different result, strictly newer timestamp → SUPERSEDE, accepted
+ *     (e.g. authorized re-close after a supervised recount) and the receipt
+ *     records which result_hash it supersedes.
+ * Residual: timestamps are station-asserted; a compromised station clock can
+ * claim newness — pair with supervised re-close procedure + revocation. */
+export function importBundle(root: string, pkgPath: string): { station: string; merged: boolean; superseded: boolean } {
   const { priv } = terminalPaths(root);
   if (!existsSync(priv)) throw new Error('terminal not initialized (run terminal-init)');
   const sealed = JSON.parse(readFileSync(pkgPath, 'utf8'));
@@ -101,10 +110,38 @@ export function importBundle(root: string, pkgPath: string): { station: string; 
   } catch { sigOk = false; }
   if (!sigOk) throw new Error(`${bundle.station}: device signature invalid — refused`);
 
+  // Dedupe + replay window, before any state changes.
+  const bundleHash = sha256Hex(readFileSync(pkgPath, 'utf8'));
+  const journal = loadImports(root);
+  if (journal.some((r) => r.bundleHash === bundleHash)) {
+    throw new Error(`${bundle.station}: duplicate bundle ${bundleHash.slice(0, 12)}… already imported — refused`);
+  }
+  const stored = loadResults(root).find((r) => r.polling_station === bundle.station);
+  let superseded = false;
+  if (stored) {
+    if (stored.result_hash === result_hash) {
+      throw new Error(`${bundle.station}: identical result already imported — refused (duplicate)`);
+    }
+    const storedTs = Date.parse(stored.timestamp);
+    const bundleTs = Date.parse(bundle.package.timestamp);
+    if (Number.isNaN(storedTs) || Number.isNaN(bundleTs)) {
+      throw new Error(`${bundle.station}: cannot order bundles (bad timestamp) — refused`);
+    }
+    if (bundleTs <= storedTs) {
+      throw new Error(`${bundle.station}: stale bundle (stored result is newer-or-equal) — refused (replay)`);
+    }
+    superseded = true;
+  }
+
   ensureDataDirs(root);
   const existing = loadResults(root).filter((r) => r.polling_station !== bundle.station);
   existing.push(bundle.package);
   saveResults(existing, root);
+  journal.push({
+    station: bundle.station, resultHash: result_hash ?? '', bundleHash,
+    timestamp: bundle.package.timestamp, receivedAt: new Date().toISOString(),
+  });
+  saveImports(journal, root);
   const events = loadEvents(root);
   const seq = events.length;
   const ts = new Date().toISOString();
@@ -116,6 +153,7 @@ export function importBundle(root: string, pkgPath: string): { station: string; 
       result_hash,
       bundleHash: sha256Hex(readFileSync(pkgPath, 'utf8')),
       stationEvents: bundle.events.length,
+      supersedes: stored?.result_hash ?? null,
     },
     prevHash, hash: '',
   };
@@ -125,5 +163,5 @@ export function importBundle(root: string, pkgPath: string): { station: string; 
   }));
   events.push(receipt);
   saveEvents(events, root);
-  return { station: bundle.station, merged: true };
+  return { station: bundle.station, merged: true, superseded };
 }

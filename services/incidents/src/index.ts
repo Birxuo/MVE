@@ -24,6 +24,11 @@ export interface Incident {
   id: string; stationId: string; ts: string;
   category: IncidentCategory; description: string; reporter: string;
   status: IncidentStatus; history: StatusChange[]; evidenceRefs: string[];
+  /** Accreditation stub: true only when observerId matches a registered
+   * station observer (see resolveAccreditation). Unauthenticated reports land
+   * accredited:false and stay fully usable — they are flagged UNVERIFIED, never
+   * dropped. Added in B3; absent on older records = false. */
+  accredited: boolean; observerId?: string;
 }
 
 export function isCategory(c: string): c is IncidentCategory {
@@ -37,7 +42,7 @@ function nextId(existing: Incident[]): string {
 /** Create a new incident in `open`. Throws on invalid category/empty fields. */
 export function createIncident(
   list: Incident[],
-  input: { stationId: string; category: string; description: string; reporter?: string; evidenceRefs?: string[] },
+  input: { stationId: string; category: string; description: string; reporter?: string; evidenceRefs?: string[]; observerId?: string; accredited?: boolean },
 ): Incident {
   const stationId = input.stationId.trim();
   if (!stationId) throw new Error('stationId required');
@@ -55,9 +60,47 @@ export function createIncident(
     status: 'open',
     history: [{ ts: now, from: 'open', to: 'open', note: 'reported' }],
     evidenceRefs: input.evidenceRefs ?? [],
+    accredited: input.accredited ?? false,
   };
+  if (input.observerId) inc.observerId = input.observerId.slice(0, 120);
   list.push(inc);
   return inc;
+}
+
+/**
+ * Accreditation stub: an observerId is accredited only if it matches a
+ * registered `observer`-role officer FOR THAT STATION. Anything else —
+ * unknown id, wrong station, wrong role, or no id at all — resolves to
+ * accredited:false (report still accepted, flagged UNVERIFIED downstream).
+ */
+export function resolveAccreditation(
+  officers: { id: string; stationId: string; role: string }[],
+  stationId: string, observerId?: string,
+): { accredited: boolean; observerId?: string } {
+  const id = (observerId ?? '').trim().slice(0, 120);
+  if (!id) return { accredited: false };
+  const ok = officers.some((o) => o.id === id && o.stationId === stationId && o.role === 'observer');
+  return ok ? { accredited: true, observerId: id } : { accredited: false };
+}
+
+/** Redaction patterns for text evidence: likely personal identifiers. */
+const SENSITIVE_PATTERNS: { name: string; re: RegExp }[] = [
+  { name: 'CIN-like code', re: /\b[A-Z]{1,2}[-\s]?\d{6,8}\b/ },
+  { name: 'long digit run', re: /\b\d{10,}\b/ },
+  { name: 'CIN keyword', re: /\bCIN\b/i },
+];
+
+/**
+ * Scan decoded text evidence for personal identifiers. Returns one finding
+ * per hit pattern (empty = clean). Binary evidence (images/PDF) cannot be
+ * scanned here — callers must report it as unscanned, never as clean.
+ */
+export function scanEvidenceText(name: string, text: string): string[] {
+  const hits: string[] = [];
+  for (const p of SENSITIVE_PATTERNS) {
+    if (p.re.test(text)) hits.push(`${name}: possible ${p.name} — redact before submitting`);
+  }
+  return hits;
 }
 
 function transition(list: Incident[], id: string, to: IncidentStatus, note: string, allowedFrom: IncidentStatus[]): Incident {

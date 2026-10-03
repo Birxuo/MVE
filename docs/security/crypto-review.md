@@ -19,20 +19,34 @@ DEFERRED = consciously postponed per FULL_PLAN.md.
 
 ## Gaps (must not be misrepresented)
 
-1. **Ephemeral device keys → CA-backed (PARTIALLY CLOSED).** `manage ceremony`
+1. **Ephemeral device keys → CA-backed (CLOSED for single-key custody).** `manage ceremony`
    generates a witnessed election root (custodians + observer + image hash in
-   `ca/ca.json` + `CEREMONY` audit event); `manage ca-sign-device` certifies each
-   station binding; `openMachine` fails closed on missing/invalid certs whenever
-   a CA is published. Remaining: HSM storage, 2-of-3 root-share splitting
-   (private key is a single file), and an INDEPENDENT cryptographic review.
-2. **No firmware attestation.** `firmware_hash` is a asserted string, not measured boot. GAP — procedural only.
+   `ca/ca.json` + `CEREMONY` audit event) as 2-of-3 Shamir shares
+   (`services/election-core/src/shares.ts`, `tests/pki.test.ts`: any pair
+   reconstructs, one share fails, tampered share mismatches the root);
+   `manage ca-sign-device --shares A,B` certifies each station binding and
+   refuses unless the reconstructed key equals the published root; `openMachine`
+   fails closed on missing/invalid certs whenever a CA is published. Remaining:
+   HSM storage and an INDEPENDENT cryptographic review.
+2. **Firmware attestation: procedural manifest (PARTIALLY CLOSED).** `openMachine`
+   refuses unless the measured hash matches the station binding AND appears in
+   the approved-release manifest (`voting/client/src/firmware.ts`, tested in
+   `tests/paper.test.ts`); `add-station` warns on unapproved hashes. Remaining:
+   measured boot / TPM / signed manifest file and HSM storage — GAP for any
+   hardware deployment.
 3. **V1 ballot privacy is structural, not cryptographic.** Separation + single-use tokens + privacy lint; votes are NOT homomorphically encrypted and there are no mixnets/ZK proofs (FULL_PLAN §§27–28, correctly DEFERRED).
-4. **Audit log signatures: PARTIALLY CLOSED.** `AuditLog` supports Ed25519
-   per-event signatures (`signEvent`/`verifyEventChain`), the polling booth
-   signs all file events with its device key, and `transparency audit-verify`
-   checks hashes + signatures against station pubkeys. Remaining: management and
-   incident CLIs have no device keys and stay hash-chained only; independent
-   replica storage is `fork()` + re-verify (no live replication protocol).
+4. **Audit log signatures: CLOSED.** `AuditLog` supports Ed25519
+   per-event signatures (`signEvent`/`verifyEventChain`/`auditCoverage`): the
+   polling booth signs all file events with its device key, `manage`
+   open/close and incident events are signed by the station device key when the
+   booth has opened there (stderr warning otherwise), CA-issued events
+   (`CEREMONY`/`DEVICE_CERTIFIED`/`DEVICE_REVOKED` under deviceId `CA`) are
+   signed by the election root (quorum-resolved), and `transparency
+   audit-verify --strict` fails on any unsigned or unverifiable event
+   (`tests/audit-sign.test.ts`). Remaining: `TRANSMISSION_RECEIVED` receipts in
+   the national store stay hash-chained only (terminal keys are X25519, no
+   signing key yet); independent live replica storage is `fork()` + re-verify
+   (no live replication protocol).
 5. **Receipts are demonstrative.** `participationReceipt` proves inclusion only if the ballot store is honest; no blind-signature / commitment scheme yet. GAP for anti-coercion claims beyond "no proof of choice exists".
 
 ## Verdict

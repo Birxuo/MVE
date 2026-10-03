@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createIncident, incidentsFromFlags, reopenIncident, resolveIncident, summarize, triageIncident,
+  createIncident, incidentsFromFlags, reopenIncident, resolveAccreditation, resolveIncident, scanEvidenceText, summarize, triageIncident,
   type Incident,
 } from '../services/incidents/src/index.js';
 
@@ -63,5 +63,37 @@ describe('incidents: anomaly bridge', () => {
     const again = incidentsFromFlags(list, [{ id: 'S1', reason: 'turnout 99.2% — investigate' }]);
     assert.equal(again.length, 0);
     assert.deepEqual(summarize(list), { open: 0, triaged: 1, investigating: 0, resolved: 0, dismissed: 0 });
+  });
+});
+
+describe('incidents: accreditation stub', () => {
+  const officers = [
+    { id: 'OBS-7', stationId: 'S1', role: 'observer' },
+    { id: 'PRES-1', stationId: 'S1', role: 'presiding' },
+  ];
+
+  it('station observer accredits; everything else fails closed but usable', () => {
+    assert.deepEqual(resolveAccreditation(officers, 'S1', 'OBS-7'), { accredited: true, observerId: 'OBS-7' });
+    assert.deepEqual(resolveAccreditation(officers, 'S1', 'PRES-1'), { accredited: false });
+    assert.deepEqual(resolveAccreditation(officers, 'S1', 'GHOST'), { accredited: false });
+    assert.deepEqual(resolveAccreditation(officers, 'S2', 'OBS-7'), { accredited: false });
+    assert.deepEqual(resolveAccreditation(officers, 'S1'), { accredited: false });
+    const list = fresh();
+    const inc = createIncident(list, {
+      stationId: 'S1', category: 'other', description: 'd',
+      observerId: 'OBS-7', accredited: true,
+    });
+    assert.equal(inc.accredited, true);
+    assert.equal(inc.observerId, 'OBS-7');
+    assert.equal(createIncident(list, { stationId: 'S1', category: 'other', description: 'e' }).accredited, false);
+  });
+});
+
+describe('incidents: evidence redaction scan', () => {
+  it('flags CIN-like codes, long digit runs, and CIN keywords; clean text passes', () => {
+    assert.ok(scanEvidenceText('n.txt', 'witness CIN AB123456 refused').length > 0);
+    assert.ok(scanEvidenceText('n.txt', 'call 0612345678 after close').length > 0);
+    assert.ok(scanEvidenceText('n.txt', 'seal intact at 19:05, four observers present').length === 0);
+    assert.ok(scanEvidenceText('n.txt', 'station S1 device M-001').length === 0);
   });
 });

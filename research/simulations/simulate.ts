@@ -2,7 +2,7 @@
 import { EligibilityService } from '../../services/eligibility/src/index.js';
 import { BallotService } from '../../services/ballot/src/index.js';
 import { generateDeviceKeys, signResult, tally } from '../../services/results/src/index.js';
-import { AuditLog, analyzeTelemetry, reconcile, sampleStations, verifyEventChain } from '../../services/audit/src/index.js';
+import { AuditLog, analyzeTelemetry, reconcile, sampleStations, signEvent, verifyEventChain } from '../../services/audit/src/index.js';
 import { toPublic, toCSV } from '../../services/transparency/src/index.js';
 import { participationReceipt } from '../../services/election-core/src/crypto-utils.js';
 import { ensureDataDirs, loadBallots, loadEvents, loadIncidents, loadVoters, saveBallots, saveElection, saveEvents, saveIncidents, saveResults, saveVoters } from '../../services/election-core/src/store.js';
@@ -54,7 +54,14 @@ ensureDataDirs(DATA_ROOT);
 // FLUSH_EVERY stations; only small metadata maps stay whole-run in memory.
 let eligibility = new EligibilityService();
 let ballots = new BallotService(eligibility);
-let audit = new AuditLog();
+// Device keys stay in memory whole-run so every simulated event is signed by its
+// station device (same posture as the booth); only pubkeys persist to disk.
+const stationKeys = new Map<string, string>();
+const eventSigner = (hash: string, deviceId: string): string | undefined => {
+  const key = stationKeys.get(deviceId);
+  return key ? signEvent(hash, key) : undefined;
+};
+let audit = new AuditLog(eventSigner);
 let simVoters: Voter[] = [];
 let chainNextSeq = 0;
 let chainTip = 'GENESIS';
@@ -77,7 +84,7 @@ function flushWindow(): void {
   // Release window memory; next window resumes the chain from the tip.
   eligibility = new EligibilityService();
   ballots = new BallotService(eligibility);
-  audit = new AuditLog(undefined, chainNextSeq, chainTip);
+  audit = new AuditLog(eventSigner, chainNextSeq, chainTip);
   simVoters = [];
 }
 
@@ -86,6 +93,7 @@ for (let s = 0; s < N_STATIONS; s++) {
   const deviceId = `M-${String(s + 1).padStart(3, '0')}`;
   stationIds.push(stationId);
   const keys = generateDeviceKeys(deviceId);
+  stationKeys.set(deviceId, keys.privateKeyPem);
   const firmwareHash = 'sha256:sim-firmware-v1';
 
   // Multi-sig open (2 approvals simulated)
@@ -113,8 +121,8 @@ for (let s = 0; s < N_STATIONS; s++) {
 
   const stationBallots = ballots.forStation(stationId);
   const { results, counted } = tally(stationBallots);
-  // Paper matches electronic in honest run
-  const rec = reconcile({ authorized: issued, electronic: counted, paper: counted });
+  // Paper matches electronic in honest run; roll = voters per station.
+  const rec = reconcile({ authorized: issued, electronic: counted, paper: counted, registered: VOTERS_PER, invalid: 0 });
   const pkg = signResult({
     election: '2026-L-SIM', polling_station: stationId, device: deviceId,
     ballots_issued: issued, ballots_counted: counted, invalid_ballots: 0,
@@ -133,6 +141,12 @@ for (let s = 0; s < N_STATIONS; s++) {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'result.json'), JSON.stringify(pkg, null, 2) + '\n');
     writeFileSync(join(dir, 'device.pub.pem'), keys.publicKeyPem);
+    // Device binding (public only — private keys stay in memory) so
+    // `transparency audit-verify` can attribute + check every event.
+    writeFileSync(join(dir, 'device.json'), JSON.stringify({
+      deviceId, stationId, firmwareHash, publicKeyPem: keys.publicKeyPem,
+      boundAt: new Date().toISOString(),
+    }, null, 2) + '\n');
   }
   if (WITH_PAPER) {
     for (const b of ballots.forStation(stationId)) {

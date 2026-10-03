@@ -5,9 +5,12 @@ import { canonical, sha256Hex } from '../../election-core/src/crypto-utils.js';
 import {
   DATA_ROOT, ensureDataDirs, loadElection, loadEvents, loadIncidents, saveEvents, saveIncidents,
 } from '../../election-core/src/store.js';
+import { signEvent } from '../../audit/src/index.js';
 import type { AuditEvent } from '../../election-core/src/types.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
-  createIncident, reopenIncident, resolveIncident, summarize, triageIncident,
+  createIncident, reopenIncident, resolveAccreditation, resolveIncident, summarize, triageIncident,
 } from './index.js';
 
 function args(): Record<string, string | true> {
@@ -33,6 +36,12 @@ function deviceFor(stationId: string, root: string): string {
   return s.stations.find((x) => x.id === stationId)?.deviceId ?? 'N/A';
 }
 
+/** Station device key for incident attestation, when the booth has opened here. */
+function stationKeyFor(stationId: string, root: string): string | undefined {
+  const p = join(root, 'stations', stationId, 'device.priv.pem');
+  return existsSync(p) ? readFileSync(p, 'utf8') : undefined;
+}
+
 function audit(type: string, stationId: string, deviceId: string, payload: Record<string, unknown>, root: string): void {
   const events = loadEvents(root);
   const seq = events.length;
@@ -40,6 +49,9 @@ function audit(type: string, stationId: string, deviceId: string, payload: Recor
   const prevHash = events.length ? events[events.length - 1].hash : 'GENESIS';
   const hash = sha256Hex(prevHash + '|' + canonical({ seq, ts, type, stationId, deviceId, payload }));
   const ev: AuditEvent = { seq, ts, type, stationId, deviceId, payload, prevHash, hash };
+  const key = stationKeyFor(stationId, root);
+  if (key) ev.signature = signEvent(hash, key);
+  else console.error(`warning: no device key for ${stationId} — incident event hash-chained only`);
   events.push(ev);
   saveEvents(events, root);
 }
@@ -55,18 +67,22 @@ function main(): void {
     const category = str(a, 'category');
     const description = str(a, 'description');
     if (!station || !category || !description) {
-      console.error('usage: report --station X --category <cat> --description "..." [--reporter Y] [--evidence a,b]');
+      console.error('usage: report --station X --category <cat> --description "..." [--reporter Y] [--observer ID] [--evidence a,b]');
       process.exit(2);
     }
     const list = loadIncidents(root);
+    const { accredited, observerId } = resolveAccreditation(
+      loadElection(root).officers, station, str(a, 'observer', ''),
+    );
     const inc = createIncident(list, {
       stationId: station, category, description,
       reporter: str(a, 'reporter', 'anonymous') || 'anonymous',
       evidenceRefs: str(a, 'evidence').split(',').map((x) => x.trim()).filter(Boolean),
+      observerId, accredited,
     });
     saveIncidents(list, root);
-    audit('INCIDENT_REPORTED', station, deviceFor(station, root), { id: inc.id, category }, root);
-    console.log(`${inc.id} reported at ${station} [${inc.category}]`);
+    audit('INCIDENT_REPORTED', station, deviceFor(station, root), { id: inc.id, category, accredited }, root);
+    console.log(`${inc.id} reported at ${station} [${inc.category}] ${accredited ? '(accredited)' : '(UNVERIFIED)'}`);
     return;
   }
 

@@ -1,12 +1,12 @@
 // Physical audit — recount paper slips vs electronic ballots vs published results.
 // Per-station report: {station, paper, electronic, published, paperTally, status}.
-// Slip-level diff for RLA-sampled stations (--sample N --seed S).
+// Slip-level diff for RLA-sampled stations (--sample N|auto, ceremony-bound).
 // Read-only: never modifies stores. Exit 0 all-match, 3 on any mismatch.
-// Usage: node dist/voting/verification/check.js [--station X] [--sample N] [--seed S] [--data data]
+// Usage: node dist/voting/verification/check.js [--station X] [--sample N|auto] [--ceremony HEX] [--seed S] [--data data]
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_ROOT, loadBallots, loadElection, loadResults, loadRevoked } from '../../../services/election-core/src/store.js';
-import { sampleStations, seedFromCeremony } from '../../../services/audit/src/index.js';
+import { resolveRlaSample } from '../../../services/audit/src/index.js';
 import type { Ballot, ResultPackage } from '../../../services/election-core/src/types.js';
 import type { PaperSlip } from '../../client/src/machine.js';
 
@@ -18,10 +18,9 @@ function arg(key: string, fallback: string): string {
 }
 const ROOT = arg('data', DATA_ROOT);
 const ONLY = arg('station', '');
-const SAMPLE_N = Number(arg('sample', '0'));
+const SAMPLE_ARG = arg('sample', '0');
+const CEREMONY_ARG = arg('ceremony', '');
 const SEED_ARG = arg('seed', '20260923');
-const CEREMONY = arg('ceremony', '');
-const SEED = CEREMONY ? seedFromCeremony(CEREMONY) : Number(SEED_ARG);
 
 function readSlips(root: string, stationId: string): PaperSlip[] {
   const dir = join(root, 'paper', stationId);
@@ -69,7 +68,22 @@ if (ONLY && !stations.length) {
   console.error(`unknown station ${ONLY}`);
   process.exit(2);
 }
-const sampled = SAMPLE_N > 0 ? new Set(sampleStations(stations, SAMPLE_N, SEED)) : null;
+let sampled: Set<string> | null = null;
+try {
+  const cfg = resolveRlaSample(ROOT, stations, { sample: SAMPLE_ARG, ceremony: CEREMONY_ARG, seed: SEED_ARG });
+  if (cfg) {
+    sampled = new Set(cfg.stations);
+    console.error(
+      `rla sample: ${cfg.stations.length}/${stations.length} stations, seed ${cfg.seed} ` +
+      (cfg.manual
+        ? 'via manual --seed (NOT ceremony-bound — demo only)'
+        : `via ceremony ${String(cfg.ceremonyHex).slice(0, 8)}…`),
+    );
+  }
+} catch (e) {
+  console.error(`rla sample refused: ${(e as Error).message}`);
+  process.exit(2);
+}
 
 let bad = 0;
 for (const station of stations) {

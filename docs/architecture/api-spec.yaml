@@ -19,20 +19,56 @@ paths:
   /api/polling-stations:
     get:
       summary: List stations
+      parameters:
+        [{name: district, in: query, required: false, schema: {type: string}},
+         {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}},
+         {name: offset, in: query, required: false, schema: {type: integer, minimum: 0}}]
       responses: {'200': {description: OK}}
   /api/results:
     get:
       summary: Station results + hashes + signatures
+      parameters:
+        [{name: station, in: query, required: false, schema: {type: string}},
+         {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}},
+         {name: offset, in: query, required: false, schema: {type: integer, minimum: 0}}]
       responses: {'200': {description: OK}}
   /api/audits:
     get:
-      summary: Audit status per station
+      summary: Audit status per station (with revoked flag)
+      parameters:
+        [{name: station, in: query, required: false, schema: {type: string}},
+         {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}},
+         {name: offset, in: query, required: false, schema: {type: integer, minimum: 0}}]
       responses: {'200': {description: OK}}
   /api/incidents:
     get:
       summary: Published incidents (no PII)
+      parameters:
+        [{name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}},
+         {name: offset, in: query, required: false, schema: {type: integer, minimum: 0}}]
       responses: {'200': {description: OK}}
   /api/verification:
     get:
       summary: Verify result hash/signature
+      parameters:
+        [{name: station, in: query, required: false, schema: {type: string}},
+         {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}},
+         {name: offset, in: query, required: false, schema: {type: integer, minimum: 0}}]
       responses: {'200': {description: OK}}
+  /api/revoked:
+    get:
+      summary: Revoked devices (mirrors revoked.csv)
+      parameters:
+        [{name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000}},
+         {name: offset, in: query, required: false, schema: {type: integer, minimum: 0}}]
+      responses: {'200': {description: OK}}
+  /api/lookup:
+    get:
+      summary: Citizen self-check (district/station/eligibility only, never CIN)
+      parameters:
+        [{name: reference, in: query, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,64}$'}}]
+      responses:
+        '200': {description: Registered}
+        '400': {description: Missing or malformed reference}
+        '404': {description: Not registered}
+        '429': {description: Rate-limited, Retry-After header}

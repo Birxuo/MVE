@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ensureDataDirs, loadEvents, loadResults, saveElection, saveEvents, saveResults, saveVoters } from '../services/election-core/src/store.js';
+import { ensureDataDirs, loadEvents, loadImports, loadResults, saveElection, saveEvents, saveResults, saveVoters } from '../services/election-core/src/store.js';
 import { exportStation, importBundle, terminalInit } from '../services/transmission/src/index.js';
-import { generateDeviceKeys, signResult } from '../services/results/src/index.js';
+import { generateDeviceKeys, signResult, type DeviceKeys } from '../services/results/src/index.js';
+import type { ResultPackage } from '../services/election-core/src/types.js';
 
 const FW = 'sha256:x';
 
-function stationRoot(): string {
+function stationRoot(): { root: string; keys: DeviceKeys } {
   const root = mkdtempSync(join(tmpdir(), 'mve-tx-station-'));
   ensureDataDirs(root);
   saveElection({
@@ -31,12 +32,22 @@ function stationRoot(): string {
   mkdirSync(join(root, 'stations', 'S1'), { recursive: true });
   writeFileSync(join(root, 'stations', 'S1', 'result.json'), JSON.stringify(pkg));
   writeFileSync(join(root, 'stations', 'S1', 'device.pub.pem'), keys.publicKeyPem);
-  return root;
+  return { root, keys };
+}
+
+function republish(station: string, keys: DeviceKeys, timestamp: string, partyA: number): ResultPackage {
+  const pkg = signResult({
+    election: 'E1', polling_station: 'S1', device: 'M-001',
+    ballots_issued: 1, ballots_counted: 1, invalid_ballots: 0,
+    results: { party_a: partyA }, timestamp, firmware_hash: FW,
+  }, keys.privateKeyPem);
+  writeFileSync(join(station, 'stations', 'S1', 'result.json'), JSON.stringify(pkg));
+  return pkg;
 }
 
 describe('transmission: sealed export → verified import', () => {
   it('round-trips offline; wrong key and tampered files are refused', () => {
-    const station = stationRoot();
+    const { root: station } = stationRoot();
     const national = mkdtempSync(join(tmpdir(), 'mve-tx-national-'));
     const tpub = terminalInit(national);
     const out = join(station, 'S1.mvepkg');
@@ -63,10 +74,46 @@ describe('transmission: sealed export → verified import', () => {
   });
 
   it('export refuses unclosed stations', () => {
-    const station = stationRoot();
+    const { root: station } = stationRoot();
     const national = mkdtempSync(join(tmpdir(), 'mve-tx-national2-'));
     const tpub = terminalInit(national);
     rmSync(join(station, 'stations', 'S1', 'result.json'));
     assert.throws(() => exportStation(station, 'S1', tpub, join(station, 'x.mvepkg')), /nothing to transmit/);
+  });
+
+  it('duplicate imports refused; stale refused; newer supersede accepted', () => {
+    const { root: station, keys } = stationRoot();
+    const national = mkdtempSync(join(tmpdir(), 'mve-tx-national3-'));
+    const tpub = terminalInit(national);
+    const out = join(station, 'S1.mvepkg');
+    exportStation(station, 'S1', tpub, out);
+    assert.deepEqual(importBundle(national, out).superseded, false);
+
+    // Same file twice → duplicate.
+    assert.throws(() => importBundle(national, out), /duplicate/);
+    // Same content re-exported (fresh seal, same result_hash) → duplicate.
+    const out2 = join(station, 'S1b.mvepkg');
+    exportStation(station, 'S1', tpub, out2);
+    assert.throws(() => importBundle(national, out2), /duplicate/);
+    assert.equal(loadImports(national).length, 1);
+
+    // Older-timestamp different result → stale (replay).
+    republish(station, keys, '2026-09-23T18:00:00Z', 2);
+    const stale = join(station, 'stale.mvepkg');
+    exportStation(station, 'S1', tpub, stale);
+    assert.throws(() => importBundle(national, stale), /stale/);
+    assert.equal(loadResults(national)[0].results.party_a, 1);
+
+    // Newer-timestamp different result → supersede (authorized re-close path).
+    const newer = republish(station, keys, '2026-09-23T20:00:00Z', 2);
+    const out3 = join(station, 'S1c.mvepkg');
+    exportStation(station, 'S1', tpub, out3);
+    const r = importBundle(national, out3);
+    assert.equal(r.superseded, true);
+    assert.equal(loadResults(national)[0].result_hash, newer.result_hash);
+    assert.equal(loadImports(national).length, 2);
+    const receipts = loadEvents(national).filter((e) => e.type === 'TRANSMISSION_RECEIVED');
+    assert.equal(receipts.length, 2);
+    assert.ok((receipts[1].payload as Record<string, unknown>).supersedes);
   });
 });

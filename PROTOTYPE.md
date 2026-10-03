@@ -35,11 +35,14 @@ npm run recover                            # DR drill: rebuild aggregate from st
 npm run station -- open --station X --approvals presiding,observer
 npm run station -- vote --station X --voter V --choice party_a
 npm run station -- close --station X --approvals presiding,deputy,observer [--endorse OFF-1:sig.hex]
-npm run verify-paper [--station X] [--sample N] [--ceremony HEX]   # paper↔electronic↔published recount
+npm run station -- status --station X [--lang ar|zgh|fr|en] [--json]  # §13 dashboard: device/firmware/cert/storage/net/observers/counts
+npm run verify-paper [--station X] [--sample N|auto] [--ceremony HEX]   # paper↔electronic↔published recount (ceremony-bound)
+npm run manage -- rla-ceremony --hex HEX --by NAME               # publish witnessed RLA randomness (pre-election, immutable)
 npm run manage -- officer-keygen --officer OFF-1 --station X       # officer key (SIM ONLY: privkey printed once)
 npm run manage -- officer-sign --key off.pem --hash DIGEST         # endorse tally digest from close refusal
-npm run manage -- ceremony --custodians A,B --observer C --key-out ca.pem   # witnessed root key
-npm run manage -- ca-sign-device --station X --key ca.pem          # certify station binding
+npm run manage -- ceremony --custodians A,B --observer C --shares ca   # witnessed root key → ca.share-{1,2,3}.json (2-of-3, no single key)
+npm run manage -- combine-shares --shares ca.share-1.json,ca.share-2.json --out ca.pem  # DR reconstruct (any 2)
+npm run manage -- ca-sign-device --station X --shares ca.share-1.json,ca.share-2.json  # certify station binding (quorum; legacy: --key ca.pem)
 npm run manage -- revoke-device --device M-001 --reason "..."      # revocation (verify paths go INVALID)
 npm run transmission -- terminal-init --national national
 npm run transmission -- export --station X --terminal-pub terminal.pub.pem --out X.mvepkg
@@ -47,6 +50,7 @@ npm run transmission -- import --file X.mvepkg --national national
 npm run transparency -- ledger-append && npm run transparency -- ledger-verify
 npm run transparency -- ledger-proof --station X
 npm run transparency -- audit-verify                               # file chain hashes + device signatures
+npm run transparency -- audit-verify -- --strict                    # fail on any unsigned/unverifiable event
 ```
 
 ## What runs

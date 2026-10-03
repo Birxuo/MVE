@@ -13,7 +13,7 @@ import {
 } from '../services/election-core/src/store.js';
 import { castBallot, closeMachine, endorsementDigest, openMachine, paperDir } from '../voting/client/src/machine.js';
 
-const FW = 'sha256:test-fw';
+const FW = 'sha256:sim-firmware-v1';
 
 function seed(root: string, voters = ['V1', 'V2', 'V3', 'V4']): void {
   ensureDataDirs(root);
@@ -76,6 +76,20 @@ describe('paper: full station session', () => {
     assert.throws(() => openMachine(root, 'S1', 'sha256:evil', ['presiding', 'observer']), /firmware mismatch/);
     openMachine(root, 'S1', FW, ['presiding', 'observer']);
     assert.throws(() => closeMachine(root, 'S1', ['presiding', 'observer']), />=3 approvals/);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('bound-but-unapproved firmware refuses open via the release manifest', () => {
+    const root = tmp();
+    seed(root);
+    const s = loadElection(root);
+    s.stations[0].firmwareHash = 'sha256:custom-unapproved-build';
+    saveElection(s, root);
+    // Binding matches (same hash registered + measured) — the manifest still refuses.
+    assert.throws(
+      () => openMachine(root, 'S1', 'sha256:custom-unapproved-build', ['presiding', 'observer']),
+      /not in the approved release manifest/,
+    );
     rmSync(root, { recursive: true, force: true });
   });
 

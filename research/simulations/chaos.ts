@@ -63,7 +63,7 @@ function check(name: string, detected: boolean, detail: string): void {
     `halt left no package (${deadNoPackage}); resume counted ${pkg.ballots_counted}/3`);
 }
 
-// 8b. partition — same bundle to two terminals; re-import is idempotent.
+// 8b. partition — same bundle to two terminals; reconnect replay is refused.
 {
   const station = mkdtempSync(join(tmpdir(), 'mve-chaos-part-s-'));
   const natA = mkdtempSync(join(tmpdir(), 'mve-chaos-part-a-'));
@@ -80,11 +80,16 @@ function check(name: string, detected: boolean, detail: string): void {
   exportStation(station, 'S1', pubB, fB);
   importBundle(natA, fA);
   importBundle(natB, fB);
-  importBundle(natA, fA); // reconnect replay — must not double-count
+  let replayRefused = false;
+  try {
+    importBundle(natA, fA); // reconnect replay — must be refused, not double-counted
+  } catch {
+    replayRefused = true;
+  }
   const hA = loadResults(natA).find((r) => r.polling_station === 'S1')?.result_hash;
   const hB = loadResults(natB).find((r) => r.polling_station === 'S1')?.result_hash;
-  check('partition', hA !== undefined && hA === hB && loadResults(natA).length === 1,
-    `terminals converge (${hA?.slice(0, 12)}...), no double-count on replay`);
+  check('partition', hA !== undefined && hA === hB && loadResults(natA).length === 1 && replayRefused,
+    `terminals converge (${hA?.slice(0, 12)}...), replay refused=${replayRefused}`);
 }
 
 // 8c. db-corruption — bit-flipped ballot store is detected, station copies recover.

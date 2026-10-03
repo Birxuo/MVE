@@ -20,6 +20,8 @@ export const STORES = {
   ca: 'ca/ca.json',
   revoked: 'ca/revoked.json',
   ceremony: 'ca/ceremony.json',
+  imports: 'transmission/imports.json',
+  rlaCeremony: 'audit/rla-ceremony.json',
 } as const;
 
 export interface ElectionStore {
@@ -121,6 +123,8 @@ export interface Revocation { deviceId: string; stationId: string; reason: strin
 
 export interface CeremonyRecord {
   ts: string; custodians: string[]; observer: string; imageHash: string; rootPubPem: string;
+  /** 2-of-3 root-share split (A1): threshold/total + share-file paths written by ceremony. */
+  threshold?: number; total?: number; shareFiles?: string[];
 }
 
 export function loadCa(root = DATA_ROOT): CaRecord | undefined {
@@ -157,4 +161,35 @@ export function loadCeremony(root = DATA_ROOT): CeremonyRecord | undefined {
 
 export function saveCeremony(rec: CeremonyRecord, root = DATA_ROOT): void {
   writeJson(STORES.ceremony, rec, root);
+}
+
+/** National import journal: every accepted bundle, for duplicate/replay rejection. */
+export interface ImportRecord {
+  station: string; resultHash: string; bundleHash: string;
+  timestamp: string; receivedAt: string;
+}
+
+export function loadImports(root = DATA_ROOT): ImportRecord[] {
+  return readJson<ImportRecord[]>(STORES.imports, [], root);
+}
+
+export function saveImports(list: ImportRecord[], root = DATA_ROOT): void {
+  writeJson(STORES.imports, list, root);
+}
+
+/** Published RLA randomness ceremony: the hex observers witnessed pre-election. */
+export interface RlaCeremonyRecord { hex: string; seed: number; publishedAt: string; publishedBy: string; }
+
+export function loadRlaCeremony(root = DATA_ROOT): RlaCeremonyRecord | undefined {
+  const p = join(root, STORES.rlaCeremony);
+  if (!existsSync(p)) return undefined;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as RlaCeremonyRecord;
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveRlaCeremony(rec: RlaCeremonyRecord, root = DATA_ROOT): void {
+  writeJson(STORES.rlaCeremony, rec, root);
 }

@@ -1,5 +1,6 @@
 import type { AuditEvent } from '../../election-core/src/types.js';
 import { canonical, sha256Hex } from '../../election-core/src/crypto-utils.js';
+import { loadRlaCeremony } from '../../election-core/src/store.js';
 import { createPublicKey, sign, verify, createPrivateKey } from 'node:crypto';
 
 export type EventSigner = (hashHex: string, deviceId: string) => string | undefined;
@@ -82,17 +83,73 @@ export function verifyEventChain(
   return { ok: true };
 }
 
-/** Reconciliation: authorized vs electronic vs paper. Returns exception on mismatch. */
-export function reconcile(a: { authorized: number; electronic: number; paper: number; invalid?: number }):
+/**
+ * Coverage report: which events carry a verifiable signature and which do not.
+ * Unsigned = hash-chained only (legacy or key-unavailable path); invalid = a
+ * signature is present but does not verify against the supplied keys (wrong key,
+ * unknown device, or tampered content). Powers `transparency audit-verify --strict`.
+ */
+export function auditCoverage(
+  events: AuditEvent[], verifiers?: Map<string, string>,
+): { total: number; signed: number; unsigned: number[]; invalid: number[] } {
+  const unsigned: number[] = [];
+  const invalid: number[] = [];
+  let signed = 0;
+  for (const e of events) {
+    if (!e.signature) {
+      unsigned.push(e.seq);
+      continue;
+    }
+    signed++;
+    const pub = verifiers?.get(e.deviceId);
+    let ok = false;
+    if (pub) {
+      try {
+        ok = verify(
+          null, Buffer.from(e.hash, 'hex'),
+          createPublicKey(pub), Buffer.from(e.signature, 'hex'),
+        );
+      } catch { ok = false; }
+    }
+    if (!ok) invalid.push(e.seq);
+  }
+  return { total: events.length, signed, unsigned, invalid };
+}
+
+/**
+ * Reconciliation (FULL_PLAN §20): the closing accounting identity.
+ *   registered = authorized + unused          (unused: never showed up)
+ *   authorized = electronic + abandoned        (abandoned: left without casting — tolerated)
+ *   electronic = paper                        (EXACT — every electronic ballot needs its slip)
+ *   invalid ≤ electronic                       (spoiled/adjudicated slips, subset of electronic)
+ * Any impossible state returns EXCEPTION and the caller must refuse to sign.
+ */
+export function reconcile(a: {
+  authorized: number; electronic: number; paper: number;
+  registered?: number; invalid?: number;
+}):
   { ok: boolean; detail: string } {
-  const { authorized, electronic, paper } = a;
+  const { authorized, electronic, paper, invalid = 0 } = a;
   if (electronic !== paper) {
     return { ok: false, detail: `EXCEPTION: electronic=${electronic} != paper=${paper}` };
   }
   if (authorized < electronic) {
     return { ok: false, detail: `EXCEPTION: authorized=${authorized} < electronic=${electronic}` };
   }
-  return { ok: true, detail: `OK: authorized=${authorized} electronic=${electronic} paper=${paper}` };
+  if (a.registered !== undefined && authorized > a.registered) {
+    return { ok: false, detail: `EXCEPTION: authorized=${authorized} > registered=${a.registered}` };
+  }
+  if (invalid < 0 || invalid > electronic) {
+    return { ok: false, detail: `EXCEPTION: invalid=${invalid} outside 0..electronic=${electronic}` };
+  }
+  const unused = a.registered !== undefined ? a.registered - authorized : -1;
+  const abandoned = authorized - electronic;
+  return {
+    ok: true,
+    detail: `OK: registered=${a.registered ?? '?'} authorized=${authorized}` +
+      `${unused >= 0 ? ` unused=${unused}` : ''} abandoned=${abandoned}` +
+      ` electronic=${electronic} paper=${paper} invalid=${invalid}`,
+  };
 }
 
 /** Seeded RNG (mulberry32) for reproducible RLA sampling. */
@@ -150,7 +207,6 @@ export function sampleSizeFor(stationCount: number): { sample: number; allowed: 
 }
 
 export type RlaVerdict = 'PASS' | 'ESCALATE' | 'FULL_RECOUNT';
-
 /**
  * Adjudicate a hand-counted sample. Human decision, never AI:
  * clean → PASS; within tolerance → ESCALATE (expand sample ×3); beyond → FULL_RECOUNT.
@@ -165,6 +221,39 @@ export function adjudicateSample(
     return { mismatches, verdict: 'ESCALATE', nextSample: Math.min(stationCount, sample * 3) };
   }
   return { mismatches, verdict: 'FULL_RECOUNT', nextSample: stationCount };
+}
+
+export interface RlaSampleConfig {
+  stations: string[]; sampleSize: number; seed: number;
+  ceremonyHex: string | null; manual: boolean;
+}
+
+/**
+ * Resolve the audit sample with ceremony binding (no post-hoc negotiation):
+ * size comes from `--sample N|auto` (auto = pre-committed table row), the seed
+ * from `--ceremony HEX`, else the recorded `audit/rla-ceremony.json`, else a
+ * manual `--seed` flagged demo-only. Returns null when sampling is off.
+ */
+export function resolveRlaSample(
+  root: string, stationIds: string[],
+  opts: { sample: string; ceremony?: string; seed?: string },
+): RlaSampleConfig | null {
+  const raw = (opts.sample ?? '0').trim().toLowerCase();
+  if (!raw || raw === '0' || raw === 'off') return null;
+  const size = raw === 'auto'
+    ? sampleSizeFor(stationIds.length).sample
+    : Number(raw);
+  if (!Number.isInteger(size) || size <= 0) throw new Error(`bad --sample ${opts.sample} (want N>0 or auto)`);
+  const clean = (opts.ceremony ?? '').trim().toLowerCase();
+  const recorded = clean ? undefined : loadRlaCeremony(root);
+  const ceremonyHex = clean || recorded?.hex || null;
+  if (ceremonyHex) {
+    const seed = seedFromCeremony(ceremonyHex); // throws on malformed hex
+    return { stations: sampleStations(stationIds, size, seed), sampleSize: size, seed, ceremonyHex, manual: false };
+  }
+  const seed = Number(opts.seed ?? '20260923');
+  if (!Number.isFinite(seed)) throw new Error(`bad --seed ${opts.seed}`);
+  return { stations: sampleStations(stationIds, size, seed), sampleSize: size, seed, ceremonyHex: null, manual: true };
 }
 
 /** Flag anomalies (turnout etc.) for HUMAN review — never auto-fraud. */

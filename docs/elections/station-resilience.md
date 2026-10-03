@@ -21,5 +21,7 @@ sealed paper-slip satchel, backup removable media for the transmission bundle.
 There is nothing to lose: stations are offline by design (FULL_PLAN §7).
 Results leave only as sealed `.mvepkg` bundles on physical media
 (`transmission export`), verified and merged at the terminal (`transmission import`).
+Media handling policy (single-use media, custody log, intake quarantine,
+duplicate/stale refusal): `docs/security/removable-media.md`.
 A station that never transmits appears as open-but-unpublished in `observe` —
 an explicit, investigable state, never a silent gap.

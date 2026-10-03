@@ -2,7 +2,8 @@
 // Each station keeps data/stations/<id>/device.json + device.pub.pem.
 // Private key lives in device.priv.pem, labeled SIMULATION ONLY (see crypto-review GAP 1).
 // Real hardware would use measured boot + HSM; here `firmwareHash` is asserted at seed
-// time and ENFORCED at open (refuse on mismatch).
+// time, ENFORCED at open against the device binding (verifyFirmware) AND the
+// approved-release manifest (firmware.ts checkApprovedFirmware).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from 'node:crypto';

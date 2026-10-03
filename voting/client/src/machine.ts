@@ -21,6 +21,8 @@ import { reconcile } from '../../../services/audit/src/index.js';
 import { signEvent } from '../../../services/audit/src/index.js';
 import { createPublicKey, verify } from 'node:crypto';
 import { ensureDevice, verifyDeviceCert, verifyFirmware } from './device.js';
+import { checkApprovedFirmware, firmwareVersion, isApprovedFirmware } from './firmware.js';
+import type { DeviceRecord } from './device.js';
 
 export interface PaperSlip { slipId: string; stationId: string; deviceId: string; choiceId: string; ts: string; election: string; }
 
@@ -45,6 +47,74 @@ export function paperDir(root: string, stationId: string): string {
   return join(root, 'paper', stationId);
 }
 
+/**
+ * Polling-station dashboard state (FULL_PLAN §13): everything an officer checks
+ * before opening — device binding, firmware approval, certificate, storage,
+ * connectivity, accredited observers, and live ballot counts. Pure read: it
+ * never mutates stores and never touches vote content.
+ */
+export interface StationDashboard {
+  station: string; state: 'open' | 'closed'; deviceId: string;
+  machine: 'ready' | 'not-provisioned';
+  firmware: 'verified' | 'mismatch' | 'unapproved' | 'unregistered';
+  firmwareVersion?: string;
+  cert: 'certified' | 'uncertified' | 'legacy';
+  storage: 'verified' | 'missing';
+  network: 'disconnected';
+  observers: number; officers: number;
+  registered: number; voted: number; electronic: number; paper: number;
+  openApprovals: number; closeApprovals: number;
+}
+
+export function stationDashboard(root: string, stationId: string): StationDashboard {
+  const s = loadElection(root);
+  const st = s.stations.find((x) => x.id === stationId);
+  if (!st) throw new Error(`unknown station ${stationId}`);
+  const recPath = join(root, 'stations', stationId, 'device.json');
+  let record: DeviceRecord | undefined;
+  try {
+    record = existsSync(recPath) ? JSON.parse(readFileSync(recPath, 'utf8')) as DeviceRecord : undefined;
+  } catch { record = undefined; }
+  const firmware = !record
+    ? 'unregistered' as const
+    : record.firmwareHash !== st.firmwareHash
+      ? 'mismatch' as const
+      : !isApprovedFirmware(record.firmwareHash)
+        ? 'unapproved' as const
+        : 'verified' as const;
+  const ca = loadCa(root);
+  let cert: StationDashboard['cert'] = 'legacy';
+  if (ca) {
+    cert = 'uncertified';
+    if (record?.cert) {
+      try {
+        verifyDeviceCert(record, ca.rootPubPem, stationId);
+        cert = 'certified';
+      } catch { /* stays uncertified */ }
+    }
+  }
+  const voters = loadVoters(root).filter((v) => v.stationId === stationId);
+  const electronic = loadBallots(root).filter((b) => b.stationId === stationId).length;
+  const pdir = paperDir(root, stationId);
+  const paper = existsSync(pdir) ? readdirSync(pdir).filter((f) => f.endsWith('.json')).length : 0;
+  const officers = s.officers.filter((o) => o.stationId === stationId);
+  return {
+    station: st.id, state: st.status, deviceId: st.deviceId,
+    machine: record ? 'ready' : 'not-provisioned',
+    firmware,
+    firmwareVersion: firmware === 'verified' ? firmwareVersion(record?.firmwareHash ?? '') : undefined,
+    cert,
+    storage: existsSync(join(root, 'stations', stationId, 'device.priv.pem')) ? 'verified' : 'missing',
+    network: 'disconnected',
+    observers: officers.filter((o) => o.role === 'observer').length,
+    officers: officers.length,
+    registered: voters.length,
+    voted: voters.filter((v) => v.status === 'VOTED').length,
+    electronic, paper,
+    openApprovals: 2, closeApprovals: 3,
+  };
+}
+
 function audit(
   root: string, type: string, stationId: string, deviceId: string,
   payload: Record<string, unknown>, privateKeyPem?: string,
@@ -65,7 +135,7 @@ function stationPrivKey(root: string, stationId: string): string | undefined {
   return existsSync(p) ? readFileSync(p, 'utf8') : undefined;
 }
 
-/** Open the polls: firmware gate + ≥2 approvals. */
+/** Open the polls: binding gate + approved-manifest gate + ≥2 approvals. */
 export function openMachine(root: string, stationId: string, measuredFirmware: string, approvals: string[]): void {
   if (approvals.length < 2) throw new Error(`open requires >=2 approvals (got ${approvals.length})`);
   const s = loadElection(root);
@@ -75,6 +145,7 @@ export function openMachine(root: string, stationId: string, measuredFirmware: s
   const registered = st.firmwareHash || measuredFirmware;
   const { record, privateKeyPem } = ensureDevice(root, stationId, st.deviceId, registered);
   verifyFirmware(record, measuredFirmware, stationId);
+  checkApprovedFirmware(measuredFirmware, stationId);
   // Fail closed under a certified election: a published CA means every device
   // must carry a valid certificate. Without a CA, the legacy procedural path
   // applies and the opening record says so (observers can see it).
@@ -151,7 +222,15 @@ export function closeMachine(
   const pdir = paperDir(root, stationId);
   const paper = existsSync(pdir) ? readdirSync(pdir).filter((f) => f.endsWith('.json')).length : 0;
 
-  const rec = reconcile({ authorized, electronic: ballots.length, paper });
+  // Booth marks every deposited slip valid: spoiled ballots are rejected BEFORE
+  // deposit (castBallot confirm=false throws) and invalid adjudication is a
+  // hand-count procedure, never something the machine invents. Roll size 0
+  // means "roll not loaded" — skip the registered bound rather than trip on it.
+  const rec = reconcile({
+    authorized, electronic: ballots.length, paper,
+    registered: st.registeredVoters > 0 ? st.registeredVoters : undefined,
+    invalid: 0,
+  });
   if (!rec.ok) {
     audit(root, 'RESULT_EXCEPTION', stationId, st.deviceId, { detail: rec.detail, approvals });
     throw new Error(rec.detail);

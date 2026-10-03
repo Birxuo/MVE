@@ -18,9 +18,11 @@
    and verify published results. This page never asks for or shows your vote.</p>
 <section>
   <h2>1. Check my registration</h2>
-  <label>Reference: <input id="ref" placeholder="voter reference"></label>
+  <label>Reference: <input id="ref" placeholder="registration card reference"></label>
   <button id="lookup">Check</button>
   <p id="reg"></p>
+  <p><small>Use the reference from your registration card — never enter your CIN or any
+     personal number. Lookups are rate-limited against enumeration.</small></p>
 </section>
 <section>
   <h2>2. Check my polling station's result</h2>
@@ -39,11 +41,17 @@
   function j(p) { return fetch(p).then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); }); }
   document.getElementById('obs').href = location.protocol + '//' + location.hostname + ':8081/';
   document.getElementById('lookup').onclick = function () {
-    var ref = document.getElementById('ref').value;
+    var ref = document.getElementById('ref').value.trim();
+    if (!/^[A-Za-z0-9._-]{1,64}$/.test(ref)) {
+      document.getElementById('reg').textContent = 'Bad reference format: letters, digits, . _ - only (max 64).';
+      return;
+    }
     j('/api/lookup?reference=' + encodeURIComponent(ref)).then(function (r) {
       document.getElementById('reg').textContent = r.status === 200
         ? 'Registered: ' + r.body.district + ' → ' + r.body.stationName + ' (' + r.body.station + '), eligible: ' + r.body.eligible
-        : 'Not found: ' + JSON.stringify(r.body);
+        : r.status === 429
+          ? 'Too many lookups — wait a minute and retry.'
+          : 'Not found: ' + JSON.stringify(r.body);
     });
   };
   document.getElementById('check').onclick = function () {

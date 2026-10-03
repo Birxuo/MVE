@@ -4,15 +4,16 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
 import {
   ensureDataDirs, loadElection, loadRevoked, saveCa, saveElection, saveRevoked, saveVoters,
 } from '../services/election-core/src/store.js';
 import { signDeviceBinding, verifyDeviceCert } from '../voting/client/src/device.js';
 import { openMachine } from '../voting/client/src/machine.js';
 import { generateDeviceKeys } from '../services/results/src/index.js';
+import { combineShares, splitSecret } from '../services/election-core/src/shares.js';
 
-const FW = 'sha256:test-fw';
+const FW = 'sha256:sim-firmware-v1';
 
 function seed(root: string): void {
   ensureDataDirs(root);
@@ -73,6 +74,30 @@ describe('pki: ceremony, certs, fail-closed opening', () => {
     ensureDataDirs(root);
     saveRevoked([{ deviceId: 'M-007', stationId: 'S9', reason: 'lost seal', ts: '2026-09-23T00:00:00Z', revokedBy: 'sec' }], root);
     assert.deepEqual(loadRevoked(root).map((r) => r.deviceId), ['M-007']);
+  });
+
+  it('2-of-3 root shares: any pair reconstructs, one share fails', () => {
+    const caKeys = generateDeviceKeys('CA');
+    const secret = Buffer.from(caKeys.privateKeyPem, 'utf8');
+    const shares = splitSecret(secret, 2, 3);
+    assert.equal(shares.length, 3);
+    for (const pair of [[shares[0], shares[1]], [shares[0], shares[2]], [shares[1], shares[2]]]) {
+      assert.equal(combineShares(pair, 2).toString('utf8'), caKeys.privateKeyPem);
+    }
+    assert.throws(() => combineShares([shares[0]], 2), /need >= 2 shares/);
+  });
+
+  it('tampered share does not yield the election root', () => {
+    const caKeys = generateDeviceKeys('CA');
+    const shares = splitSecret(Buffer.from(caKeys.privateKeyPem, 'utf8'), 2, 3);
+    const bad = { index: shares[1].index, dataHex: 'ff' + shares[1].dataHex.slice(2) };
+    const reconstructed = combineShares([shares[0], bad], 2).toString('utf8');
+    const expected = caKeys.publicKeyPem.trim();
+    let derived = '';
+    try {
+      derived = createPublicKey(createPrivateKey(reconstructed)).export({ type: 'spki', format: 'pem' }).toString().trim();
+    } catch { derived = 'UNPARSEABLE'; }
+    assert.notEqual(derived, expected);
   });
 });
 

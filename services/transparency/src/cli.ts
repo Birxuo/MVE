@@ -136,9 +136,10 @@ async function main(): Promise<void> {
   }
 
   if (c === 'audit-verify') {
-    const { verifyEventChain } = await import('../../../services/audit/src/index.js');
+    const { verifyEventChain, auditCoverage } = await import('../../../services/audit/src/index.js');
     const { existsSync: ex, readFileSync: rf, readdirSync: rd } = await import('node:fs');
     const { join: jp } = await import('node:path');
+    const { loadCa } = await import('../../election-core/src/store.js');
     const events = loadEvents(root);
     const verifiers = new Map<string, string>();
     const sdir = jp(root, 'stations');
@@ -153,11 +154,27 @@ async function main(): Promise<void> {
         }
       }
     }
+    // Authority scope: CA-issued events (CEREMONY/DEVICE_CERTIFIED/DEVICE_REVOKED)
+    // verify against the published election root.
+    const ca = loadCa(root);
+    if (ca) verifiers.set('CA', ca.rootPubPem);
     const v = verifyEventChain(events, verifiers);
-    const signed = events.filter((e) => e.signature).length;
-    console.log(v.ok
-      ? `audit chain OK (${events.length} events, ${signed} signed, ${verifiers.size} device keys)`
-      : `AUDIT CHAIN BROKEN at seq ${v.badSeq}`);
+    const cov = auditCoverage(events, verifiers);
+    const strict = a['strict'] === true || String(a['strict'] ?? '') === '1';
+    const summary = `audit chain ${v.ok ? 'OK' : `BROKEN at seq ${v.badSeq}`} ` +
+      `(${events.length} events, ${cov.signed} signed, ${cov.unsigned.length} hash-only` +
+      `${ca ? ', +CA root' : ''})`;
+    if (strict) {
+      if (!v.ok || cov.unsigned.length || cov.invalid.length) {
+        console.log(`${summary}\nSTRICT FAIL: unsigned seqs [${cov.unsigned.join(', ')}]` +
+          `${cov.invalid.length ? `; bad signatures at seqs [${cov.invalid.join(', ')}]` : ''}` +
+          `${!v.ok ? `; chain break at seq ${v.badSeq}` : ''}`);
+        process.exit(3);
+      }
+      console.log(`${summary} — STRICT PASS (every event signed + verified)`);
+      return;
+    }
+    console.log(v.ok ? summary : `AUDIT CHAIN BROKEN at seq ${v.badSeq}`);
     process.exit(v.ok ? 0 : 3);
     return;
   }

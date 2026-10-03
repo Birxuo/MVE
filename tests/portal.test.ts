@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { startServer } from '../apps/public-portal/src/server.js';
+import { LOOKUP_LIMIT, resetLookupThrottle } from '../apps/public-portal/src/server.js';
 import {
-  ensureDataDirs, saveElection, saveEvents, saveIncidents, saveResults, saveVoters,
+  ensureDataDirs, saveElection, saveEvents, saveIncidents, saveResults, saveRevoked, saveVoters,
 } from '../services/election-core/src/store.js';
 import { generateDeviceKeys, signResult } from '../services/results/src/index.js';
 import { createIncident } from '../services/incidents/src/index.js';
@@ -45,6 +46,10 @@ before(() => {
     stationId: 'S1', category: 'other', description: 'test, with "quotes"', reporter: 'observer:9',
   });
   saveIncidents(incidents, root);
+  saveRevoked([{
+    deviceId: 'M-007', stationId: 'S9', reason: 'lost seal',
+    ts: '2026-09-23T00:00:00Z', revokedBy: 'sec',
+  }], root);
   server = startServer(root, 0, '127.0.0.1');
   return new Promise<void>((resolve) => {
     server.on('listening', () => {
@@ -75,6 +80,32 @@ describe('portal: endpoint matrix', () => {
     assert.equal(v[0].hashOk, true);
   });
 
+  it('paginates lists on ?limit&offset; bare arrays stay the default', async () => {
+    const all = JSON.parse((await get('/api/results')).body);
+    assert.ok(Array.isArray(all));
+    const p1 = JSON.parse((await get('/api/results?limit=1&offset=0')).body);
+    assert.deepEqual(Object.keys(p1).sort(), ['limit', 'offset', 'rows', 'total']);
+    assert.equal(p1.total, all.length);
+    assert.equal(p1.rows.length, 1);
+    const empty = JSON.parse((await get('/api/results?limit=10&offset=99')).body);
+    assert.equal(empty.rows.length, 0);
+    assert.equal(empty.total, all.length);
+    assert.equal((await get('/api/results?limit=0')).status, 400);
+    assert.equal((await get('/api/results?limit=1001')).status, 400);
+    const inc = JSON.parse((await get('/api/incidents?limit=1')).body);
+    assert.equal(inc.total, 1);
+  });
+
+  it('exposes revocations via /api/revoked and flags them on audits', async () => {
+    const rev = JSON.parse((await get('/api/revoked')).body);
+    assert.ok(Array.isArray(rev));
+    assert.equal(rev[0].device, 'M-007');
+    assert.equal(rev[0].station, 'S9');
+    assert.doesNotMatch(JSON.stringify(rev), /private|pub\.pem/i);
+    const audits = JSON.parse((await get('/api/audits')).body);
+    assert.equal(audits[0].revoked, false);
+  });
+
   it('404s unknown routes and elections', async () => {
     assert.equal((await get('/nope')).status, 404);
     assert.equal((await get('/api/elections/NOPE')).status, 404);
@@ -90,7 +121,7 @@ describe('portal: endpoint matrix', () => {
 
   it('responses carry no voter, ballot-detail, or reporter data', async () => {
     const bodies = await Promise.all(
-      ['/api/results', '/api/audits', '/api/incidents', '/api/verification', '/api/polling-stations']
+      ['/api/results', '/api/audits', '/api/incidents', '/api/verification', '/api/polling-stations', '/api/revoked']
         .map((p) => get(p).then((r) => r.body)),
     );
     for (const b of bodies) {
@@ -118,6 +149,26 @@ describe('portal: endpoint matrix', () => {
     assert.doesNotMatch(ok.body, /voterId|party_a|token/i);
     assert.equal((await get('/api/lookup?reference=GHOST')).status, 404);
     assert.equal((await get('/api/lookup')).status, 400);
+  });
+
+  it('lookup rejects malformed references; CIN-shaped input finds nothing', async () => {
+    assert.equal((await get('/api/lookup?reference=' + encodeURIComponent('../../etc'))).status, 400);
+    assert.equal((await get('/api/lookup?reference=' + 'x'.repeat(200))).status, 400);
+    assert.equal((await get('/api/lookup?reference=AB123456')).status, 404);
+  });
+
+  it('lookup throttles enumeration with 429 + Retry-After', async () => {
+    resetLookupThrottle();
+    for (let i = 0; i < LOOKUP_LIMIT; i++) {
+      const r = await get('/api/lookup?reference=GHOST');
+      assert.equal(r.status, 404);
+    }
+    const over = await get('/api/lookup?reference=GHOST');
+    assert.equal(over.status, 429);
+    assert.match(over.body, /too many lookups/);
+    assert.ok(Number(over.headers.get('retry-after')) > 0);
+    resetLookupThrottle();
+    assert.equal((await get('/api/lookup?reference=GHOST')).status, 404);
   });
 
   it('serves the citizen page as HTML', async () => {

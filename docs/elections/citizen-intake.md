@@ -32,3 +32,18 @@ Reports never modify results; duplicates are deduped against open cases
 (`incidentsFromFlags` pattern); anonymous reports accepted but deprioritized;
 reporter identities stay in the incident store, never published
 (`GET /api/incidents` strips them — tested in `tests/portal.test.ts`).
+
+## Lookup abuse rules (B4)
+
+`GET /api/lookup` answers registered-or-not, so it is an enumeration oracle
+by nature (same as today's electoral-list portal). Containment, not removal:
+
+- Response is district/station/eligibility ONLY — no choices, tokens, voters,
+  no CIN anywhere in the path (registration-card reference, format-gated
+  `^[A-Za-z0-9._-]{1,64}$`; malformed input is 400, never a store touch).
+- Per-IP sliding-window throttle (30/min, 429 + Retry-After) on `/api/lookup`
+  only; published results stay freely browsable.
+- Citizen page instructs: registration-card reference, never the CIN; client
+  pre-validates format and explains 429.
+- Residual: 30/min/IP still permits slow harvesting — production needs
+  CAPTCHA/proof-of-work, access logging, and CNDP-reviewed identification.

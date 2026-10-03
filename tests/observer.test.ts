@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { startObserverPortal } from '../apps/observer-portal/src/server.js';
 import {
-  ensureDataDirs, loadEvents, loadIncidents, saveElection, saveEvents, saveVoters,
+  ensureDataDirs, loadElection, loadEvents, loadIncidents, saveElection, saveEvents, saveVoters,
 } from '../services/election-core/src/store.js';
 
 let server: Server;
@@ -94,5 +94,69 @@ describe('observer portal', () => {
       station: 'S1', category: 'other', description: 'x',
       evidence: [{ name: 'big.png', mime: 'image/png', sha256: bigSha, contentBase64: big }],
     })).status, 413);
+  });
+
+  it('flags accreditation: registered station observer → ACCREDITED, others → UNVERIFIED', async () => {
+    const post = (b: unknown): Promise<{ status: number; body: string }> => call('/api/reports', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b),
+    });
+    const election = loadElection(root);
+    election.officers.push({ id: 'OBS-7', stationId: 'S1', role: 'observer' });
+    election.officers.push({ id: 'PRES-1', stationId: 'S1', role: 'presiding' });
+    saveElection(election, root);
+
+    const good = await post({ station: 'S1', category: 'other', description: 'accredited report', observerId: 'OBS-7' });
+    assert.equal(good.status, 201);
+    assert.deepEqual(JSON.parse(good.body).verification, 'ACCREDITED');
+    const stored = loadIncidents(root).find((x) => x.id === JSON.parse(good.body).id);
+    assert.equal(stored?.accredited, true);
+    assert.equal(stored?.observerId, 'OBS-7');
+
+    // Unauthenticated posts still work — flagged, never dropped.
+    const anon = await post({ station: 'S1', category: 'other', description: 'anon report' });
+    assert.equal(anon.status, 201);
+    assert.deepEqual(JSON.parse(anon.body).verification, 'UNVERIFIED');
+
+    // Wrong role and unknown id fail closed to UNVERIFIED.
+    for (const observerId of ['PRES-1', 'GHOST']) {
+      const r = await post({ station: 'S1', category: 'other', description: 'x', observerId });
+      assert.equal(r.status, 201);
+      assert.deepEqual(JSON.parse(r.body).verification, 'UNVERIFIED', observerId);
+    }
+    // Other-station observer: registered at S9, reporting at S1 → UNVERIFIED.
+    const e2 = loadElection(root);
+    e2.officers.push({ id: 'OBS-9', stationId: 'S9', role: 'observer' });
+    saveElection(e2, root);
+    const cross = await post({ station: 'S1', category: 'other', description: 'cross', observerId: 'OBS-9' });
+    assert.equal(JSON.parse(cross.body).verification, 'UNVERIFIED');
+  });
+
+  it('scans text evidence for identifiers; binaries pass as unscanned', async () => {
+    const post = (b: unknown): Promise<{ status: number; body: string }> => call('/api/reports', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b),
+    });
+    const ev = (name: string, mime: string, raw: string): Record<string, string> => ({
+      name, mime,
+      sha256: createHash('sha256').update(Buffer.from(raw)).digest('hex'),
+      contentBase64: Buffer.from(raw).toString('base64'),
+    });
+    const dirty = await post({
+      station: 'S1', category: 'other', description: 'dirty notes',
+      evidence: [ev('notes.txt', 'text/plain', 'witness with CIN AB123456 refused')],
+    });
+    assert.equal(dirty.status, 400);
+    assert.match(dirty.body, /redaction/);
+    const clean = await post({
+      station: 'S1', category: 'other', description: 'clean notes',
+      evidence: [ev('notes.txt', 'text/plain', 'seal intact at 19:05, four observers present')],
+    });
+    assert.equal(clean.status, 201);
+    assert.deepEqual(JSON.parse(clean.body).redaction, { scanned: ['notes.txt'], unscanned: [] });
+    const mixed = await post({
+      station: 'S1', category: 'other', description: 'mixed',
+      evidence: [ev('notes.txt', 'text/plain', 'all quiet'), ev('photo.png', 'image/png', 'photo-bytes')],
+    });
+    assert.equal(mixed.status, 201);
+    assert.deepEqual(JSON.parse(mixed.body).redaction, { scanned: ['notes.txt'], unscanned: ['photo.png'] });
   });
 });
