@@ -1,6 +1,6 @@
 # Legal Framework Checklist (research draft, NOT legal advice)
 
-Technology is ~50% of this project (FULL_PLAN §38). None of the following exists
+Technology is ~50% of this project. None of the following exists
 yet; each would need legislation/authorization before any real deployment.
 Every item names its **owner** (the institution that must act — see
 `docs/legal/institutions.md`) and the **evidence** that closes it. No item may

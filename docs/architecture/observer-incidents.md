@@ -1,6 +1,6 @@
 # Observer + Incidents (Phase 2 leftover)
 
-Source: `FULL_PLAN.md` §§16–17, `README.md` Observer System + Incident Reporting.
+Source: `README.md` Observer System + Incident Reporting.
 
 ## Workflow
 

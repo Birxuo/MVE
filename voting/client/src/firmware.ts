@@ -1,4 +1,4 @@
-// Approved firmware manifest — procedural V1 (FULL_PLAN §5).
+// Approved firmware manifest — procedural V1 (device identity requirements).
 // The booth refuses to open unless the MEASURED firmware hash is BOTH bound to
 // the station device (device.ts verifyFirmware) AND present in this table.
 // Production replaces this static table with a signed manifest file verified

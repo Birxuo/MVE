@@ -1,6 +1,6 @@
 // MVE independent verify bundle — NO dependency on the MVE codebase.
 // Only node:crypto + node:fs. Read these ~160 lines in full before trusting it;
-// that is the entire point (FULL_PLAN §29: no "trust our proprietary algorithm").
+// that is the entire point (no "trust our proprietary algorithm").
 //
 // Verifies, from the §42 open dataset alone:
 //   1. every results.csv row's result_hash recomputes from its own fields

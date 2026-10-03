@@ -117,7 +117,7 @@ export function auditCoverage(
 }
 
 /**
- * Reconciliation (FULL_PLAN §20): the closing accounting identity.
+ * Reconciliation: the closing accounting identity.
  *   registered = authorized + unused          (unused: never showed up)
  *   authorized = electronic + abandoned        (abandoned: left without casting — tolerated)
  *   electronic = paper                        (EXACT — every electronic ballot needs its slip)

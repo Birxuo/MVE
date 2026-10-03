@@ -1,6 +1,6 @@
 # Threat Model V1
 
-Source: `FULL_PLAN.md` §§ 30-35 + `README.md` Threat Model.
+Source: `README.md` Threat Model.
 
 ## Assets
 

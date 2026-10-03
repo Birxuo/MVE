@@ -1,4 +1,4 @@
-// Adversarial barrier test (FULL_PLAN §45) — defeat ONE barrier at a time and
+// Adversarial barrier test (anti-corruption barriers) — defeat ONE barrier at a time and
 // prove a DIFFERENT barrier catches it. Exit 0 iff all six defeats are detected.
 // Usage: node dist/research/simulations/barriers.js [--only b1|b2|b3|b4|b5|b6]
 import { mkdtempSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';

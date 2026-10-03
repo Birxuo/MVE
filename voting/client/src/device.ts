@@ -45,7 +45,7 @@ export function ensureDevice(
   return { record, privateKeyPem, created: true };
 }
 
-/** Firmware gate: refuse to open on any mismatch (FULL_PLAN §5, procedural V1). */
+/** Firmware gate: refuse to open on any mismatch (device identity, procedural V1). */
 export function verifyFirmware(record: DeviceRecord, actual: string, stationId: string): void {
   if (record.firmwareHash !== actual) {
     throw new Error(

@@ -1,4 +1,4 @@
-// Transparency ledger — append-only Merkle-chained public log (FULL_PLAN §9).
+// Transparency ledger — append-only Merkle-chained public log.
 // Leaves are result-package hashes ONLY (no votes, no identities).
 // Checkpoints chain like the audit log: each checkpoint commits {root, prevRoot}.
 // Anyone holding a checkpoint root can verify inclusion proofs independently.

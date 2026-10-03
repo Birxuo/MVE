@@ -4,7 +4,7 @@ Scope: `services/results`, `services/election-core/src/crypto-utils.ts`,
 `services/election-core/src/shares.ts`, `services/audit` chaining,
 `voting/client` booth + firmware gate, receipt scheme.
 Status legend: OK = acceptable for research prototype; GAP = must fix before any pilot;
-DEFERRED = consciously postponed per FULL_PLAN.md.
+DEFERRED = consciously postponed per the original design.
 
 ## What is used (all standard, no custom crypto)
 
@@ -36,7 +36,7 @@ DEFERRED = consciously postponed per FULL_PLAN.md.
    `tests/paper.test.ts`); `add-station` warns on unapproved hashes. Remaining:
    measured boot / TPM / signed manifest file and HSM storage — GAP for any
    hardware deployment.
-3. **V1 ballot privacy is structural, not cryptographic.** Separation + single-use tokens + privacy lint; votes are NOT homomorphically encrypted and there are no mixnets/ZK proofs (FULL_PLAN §§27–28, correctly DEFERRED).
+3. **V1 ballot privacy is structural, not cryptographic.** Separation + single-use tokens + privacy lint; votes are NOT homomorphically encrypted and there are no mixnets/ZK proofs (correctly DEFERRED).
 4. **Audit log signatures: CLOSED.** `AuditLog` supports Ed25519
    per-event signatures (`signEvent`/`verifyEventChain`/`auditCoverage`): the
    polling booth signs all file events with its device key, `manage`

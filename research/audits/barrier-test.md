@@ -1,4 +1,4 @@
-# Adversarial Barrier Test (FULL_PLAN §45) — 2026-09-27
+# Adversarial Barrier Test (anti-corruption barriers) — 2026-09-27
 
 Method: `research/simulations/barriers.ts` defeats ONE barrier per scenario on
 throwaway election roots; a DIFFERENT barrier must catch it. Run: `npm run barriers`.

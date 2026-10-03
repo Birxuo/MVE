@@ -1,4 +1,4 @@
-// Transmission terminal — offline-first result sync (FULL_PLAN §7).
+// Transmission terminal — offline-first result sync.
 // Stations are offline during voting. After close, the station exports an
 // ENCRYPTED bundle (X25519 ECDH to the terminal + AES-256-GCM); the terminal
 // decrypts, verifies hashes + device signature, then merges into the national

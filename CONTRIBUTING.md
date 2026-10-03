@@ -12,4 +12,4 @@ Welcome: research, threat modeling, security analysis, crypto research, accessib
 4. Use standard crypto only (Ed25519, SHA-256/SHA-3, AES-256, TLS 1.3).
 5. Keep polling-station operation offline-first.
 
-See `README.md#development-rules` and `FULL_PLAN.md`.
+See `README.md#development-rules`.

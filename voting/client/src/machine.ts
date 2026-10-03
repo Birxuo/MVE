@@ -48,7 +48,7 @@ export function paperDir(root: string, stationId: string): string {
 }
 
 /**
- * Polling-station dashboard state (FULL_PLAN §13): everything an officer checks
+ * Polling-station dashboard state (officer pre-open checklist): everything an officer checks
  * before opening — device binding, firmware approval, certificate, storage,
  * connectivity, accredited observers, and live ballot counts. Pure read: it
  * never mutates stores and never touches vote content.

@@ -1,4 +1,4 @@
-# Removable-Media Handling (research procedure — FULL_PLAN §7)
+# Removable-Media Handling (research procedure — offline-first transport)
 
 Bundles (`.mvepkg`) move between polling stations and the national terminal
 ONLY on physical media. No network code exists anywhere in the prototype, so
@@ -31,4 +31,4 @@ this procedure IS the transport security.
 - Station clocks are asserted: a compromised clock can claim newness. Pair
   re-close acceptance with supervised procedure + `revoke-device` on suspicion.
 - This is procedural, not device-enforced (no USB-port lockdown in the
-  simulator). Production hardware disables ports per FULL_PLAN §6.
+  simulator). Production hardware disables ports per the hardened-device requirements.

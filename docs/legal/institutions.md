@@ -1,4 +1,4 @@
-# Institutional Separation (FULL_PLAN §39 — research draft)
+# Institutional Separation (research draft)
 
 No single institution should control the election. The Constitution frames free,
 sincere, transparent elections with neutral observation; the prototype mirrors

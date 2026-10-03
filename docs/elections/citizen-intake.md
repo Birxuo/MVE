@@ -1,6 +1,6 @@
 # Citizen Intake Channels (research spec — only web + CLI implemented)
 
-FULL_PLAN §17 requires reporting via web, mobile, SMS, hotline, and polling-station
+The design requires reporting via web, mobile, SMS, hotline, and polling-station
 QR. Status per channel:
 
 ## Implemented

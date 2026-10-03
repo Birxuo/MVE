@@ -3,7 +3,7 @@
 > STATUS: SIMULATION ONLY. No controlled pilot is authorized, staffed, or
 > scheduled. Every gate below is UNMET. A pilot runs the technology ALONGSIDE
 > the existing paper process and never determines the legal result until
-> separately authorized (FULL_PLAN §§22–23, 48; shadow rules in
+> separately authorized (shadow rules in
 > `docs/elections/shadow-election.md` — the shadow never promotes itself).
 
 ## Station typology (start 10 → 50 → 200)

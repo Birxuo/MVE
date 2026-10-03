@@ -1,4 +1,4 @@
-# Shadow Election Protocol (FULL_PLAN §47 — research draft)
+# Shadow Election Protocol (research draft)
 
 The system shadows a real election WITHOUT legal effect: two parallel counts,
 one comparison.

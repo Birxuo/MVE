@@ -1,4 +1,4 @@
-# Anti-Corruption Trace (FULL_PLAN §45)
+# Anti-Corruption Trace (six-barrier model — see README Core Principles)
 
 Design goal: no single person, machine, database, party, administrator, or
 vendor can change the outcome without detection. Each barrier maps to code:

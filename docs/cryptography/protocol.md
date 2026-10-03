@@ -1,6 +1,6 @@
 # Crypto Protocol V1 (auditable, no custom crypto)
 
-Source: `FULL_PLAN.md` §§ 5-9, 27-28.
+Source: `README.md` Cryptographic Verification + Security Requirements.
 
 ## Primitives
 

@@ -1,4 +1,4 @@
-# Independent Reproduction (FULL_PLAN §29 — don't trust, verify)
+# Independent Reproduction (README Final Principle — don't trust, verify)
 
 You don't need this repository's code to check an election. You need the five
 open-data CSVs, Node.js (for SHA-256/Ed25519), and the 160-line

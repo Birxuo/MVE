@@ -18,7 +18,7 @@ sealed paper-slip satchel, backup removable media for the transmission bundle.
 
 ## Connectivity loss
 
-There is nothing to lose: stations are offline by design (FULL_PLAN §7).
+There is nothing to lose: stations are offline by design.
 Results leave only as sealed `.mvepkg` bundles on physical media
 (`transmission export`), verified and merged at the terminal (`transmission import`).
 Media handling policy (single-use media, custody log, intake quarantine,
@@ -28,7 +28,7 @@ an explicit, investigable state, never a silent gap.
 
 ## Disaster recovery — 3 copies, any one rebuilds (C4)
 
-Keep three independent copies (FULL_PLAN §32): the station's signed
+Keep three independent copies: the station's signed
 `stations/<id>/result.json`, the regional data-center mirror (`stations/` +
 `audit/` copied off-site), and offline archival media. The national aggregate
 (`transparency/results.json`) is DERIVED data — it can always be rebuilt:

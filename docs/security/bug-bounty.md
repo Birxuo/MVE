@@ -24,4 +24,4 @@ engineering of people, physical intrusion, denial-of-service endurance.
 
 Duplicates share the award; first reporter wins. Reports must include
 reproduction against a seeded research election (`npm run simulate` + steps).
-Findings and fixes publish quarterly (FULL_PLAN §30: red-team transparency).
+Findings and fixes publish quarterly (red-team transparency).

@@ -1,6 +1,6 @@
 # Election Core Spec (Phase 1)
 
-Source: `FULL_PLAN.md` §§ 1-2, 13-14, 20 + `README.md` Election Core.
+Source: `README.md` Election Core.
 
 ## Entities
 

@@ -1,6 +1,6 @@
 // Incident service core — structured reporting workflow.
 // Reports NEVER auto-change results: open → triaged → investigating → resolved|dismissed.
-// Source: FULL_PLAN.md §§16-17, README.md Incident Reporting.
+// Source: README.md Incident Reporting.
 
 export const INCIDENT_CATEGORIES = [
   'voting-equipment',

@@ -1,4 +1,4 @@
-// Chaos drills — power loss, network partition, DB corruption (FULL_PLAN §§33-35).
+// Chaos drills — power loss, network partition, DB corruption (resilience).
 // File-level scenarios on throwaway roots. Exit 0 iff all selected detect.
 // Usage: node dist/research/simulations/chaos.js [--only power|partition|db-corruption]
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
