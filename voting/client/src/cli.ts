@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { DATA_ROOT, castBallot, closeMachine, openMachine, stationDashboard, verifyParticipationReceipt, type StationDashboard } from './machine.js';
 import { loadElection, loadVoters } from '../../../services/election-core/src/store.js';
-import { resolveLocale, t, type Locale } from '../../../services/election-core/src/i18n.js';
+import { resolveLocale, localeStatus, t, type Locale } from '../../../services/election-core/src/i18n.js';
 
 function args(): Record<string, string | true> {
   const out: Record<string, string | true> = {};
@@ -32,6 +32,9 @@ function main(): void {
   const root = str(a, 'data', DATA_ROOT) || DATA_ROOT;
   const c = process.argv[2] ?? 'status';
   const lang: Locale = resolveLocale(a['lang']);
+  if (localeStatus(lang) === 'provisional') {
+    console.error(`note: the ${lang} bundle is provisional and needs native-speaker review (docs/accessibility/plan.md)`);
+  }
 
   if (c === 'open') {
     const station = str(a, 'station');

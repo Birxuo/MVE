@@ -4,7 +4,8 @@
 
 - Runtime: ZERO third-party packages. Only `node:crypto`, `node:fs`, `node:path`, `node:test`, `node:assert`.
 - Dev: `typescript ^5.6.0`, `@types/node ^22.0.0` (+ transitive, locked in `package-lock.json`).
-- `npm audit` (2026-09-26): 0 vulnerabilities, prod and dev.
+- `npm audit` (2026-10-03): 0 vulnerabilities, prod and dev.
+- Toolchain pinned: Node v24.11.0, npm 11.6.1, tsc 5.9.3 (`docs/security/baseline.md`).
 
 ## Policy
 
@@ -13,8 +14,11 @@
 - Build is `tsc` only — no bundlers, no postinstall scripts (verify: no `postinstall` in `package.json`).
 - `dist/` and `node_modules/` are build artifacts, never reviewed as source.
 
-## Residual risks
+## SLSA / provenance note (for Phase 6)
 
-- TypeScript compiler supply chain (accepted; reproducible via lockfile + `npm ci`).
-- Node.js toolchain (pinned version recorded in `docs/security/baseline.md`).
-- No SLSA/provenance attestations in V1 — noted for Phase 6 independent review.
+- No SLSA/provenance attestations in V1. The path there is short by design:
+  zero runtime deps means attesting the build is attesting `tsc` + Node.
+- What independent review must still demand: reproducible `npm ci` from the
+  lockfile (verify byte-identical `dist/` across two machines), pinned-runner
+  CI emitting provenance, and a lockfile-change review rule (every transitive
+  bump re-runs audit + full suite before merge).

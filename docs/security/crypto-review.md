@@ -1,6 +1,8 @@
-# Cryptographic Review V1 (self-review, NOT an independent audit)
+# Cryptographic Review V2 (self-review 2026-10-03, NOT an independent audit)
 
-Scope: `services/results`, `services/election-core/src/crypto-utils.ts`, `services/audit` chaining.
+Scope: `services/results`, `services/election-core/src/crypto-utils.ts`,
+`services/election-core/src/shares.ts`, `services/audit` chaining,
+`voting/client` booth + firmware gate, receipt scheme.
 Status legend: OK = acceptable for research prototype; GAP = must fix before any pilot;
 DEFERRED = consciously postponed per FULL_PLAN.md.
 
@@ -55,6 +57,13 @@ DEFERRED = consciously postponed per FULL_PLAN.md.
    lookup. Remaining: the booth sees the blinding at issuance, and
    blind-signature issuance (booth never learns the receipt at all) is deferred.
 
-## Verdict
+## Verdict (2026-10-03 self-pass)
 
-Fit for research/simulation. NOT fit for pilot claims of end-to-end verifiability until gaps 1–2 (key ceremony, measured boot or documented procedural equivalent) are closed, and an INDEPENDENT cryptographic review (README Phase 6) is commissioned.
+Fit for research/simulation. Gap 1 (single-key custody) is closed via 2-of-3
+shares; gap 2 (attestation) has a procedural manifest but measured boot is still
+missing. NOT fit for pilot claims of end-to-end verifiability until gap 2 is
+closed (measured boot or documented procedural equivalent accepted by the
+certifier) AND an INDEPENDENT cryptographic review (README Phase 6) is
+commissioned. No custom crypto anywhere: Ed25519 / SHA-256 / X25519+AES-GCM /
+Shamir-over-GF(256) splitting only — the sharing math is textbook, but it has
+not had outside review either.

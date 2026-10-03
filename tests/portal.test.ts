@@ -72,6 +72,8 @@ describe('portal: endpoint matrix', () => {
       const r = await get(p);
       assert.equal(r.status, 200, p);
       assert.ok(r.body.length > 2, p);
+      assert.equal(r.headers.get('x-api-version'), 'v1', p);
+      assert.match(r.headers.get('cache-control') ?? '', /no-store/, p);
     }
     const res = JSON.parse((await get('/api/results?station=S1')).body);
     assert.equal(res[0].station, 'S1');
@@ -136,6 +138,10 @@ describe('portal: endpoint matrix', () => {
     assert.equal(r.status, 200);
     assert.match(r.headers.get('content-type') ?? '', /text\/html/);
     assert.match(r.body, /Public Transparency/);
+    assert.match(r.body, /<caption>/);
+    assert.match(r.body, /scope="col"/);
+    assert.match(r.body, /id="contrastToggle"/);
+    assert.match(r.body, /aria-live="polite"/);
   });
 
   it('citizen lookup returns district/station/eligibility only', async () => {
@@ -176,5 +182,8 @@ describe('portal: endpoint matrix', () => {
     assert.equal(r.status, 200);
     assert.match(r.headers.get('content-type') ?? '', /text\/html/);
     assert.match(r.body, /Check my registration/);
+    assert.match(r.body, /id="contrastToggle"/);
+    assert.match(r.body, /aria-live="polite"/);
+    assert.match(r.body, /never enter your CIN/);
   });
 });

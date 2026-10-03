@@ -38,9 +38,20 @@ function auditStatuses(root: string): Map<string, string> {
 
 function send(res: ServerResponse, code: number, body: unknown, headers: Record<string, string> = {}): void {
   const payload = JSON.stringify(body);
-  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(payload), ...headers });
+  res.writeHead(code, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(payload),
+    // Version pin + no intermediary caching: clients detect behavior changes,
+    // and election data is never stored by shared caches (see portal-operations.md).
+    'x-api-version': API_VERSION,
+    'cache-control': 'no-store',
+    ...headers,
+  });
   res.end(payload);
 }
+
+/** API behavior version. Additive changes only under v1; breaking → v2 path. */
+export const API_VERSION = 'v1';
 
 /**
  * Lookup abuse throttle: the reference oracle inherently answers
@@ -74,7 +85,7 @@ function route(root: string, method: string, url: string): { code: number; body:
   const seg = u.pathname.split('/').filter(Boolean);
 
   if (seg.length === 0) {
-    return { code: 200, body: { service: 'mve-transparency', api: 'v1', endpoints: ['elections', 'districts', 'polling-stations', 'results', 'audits', 'incidents', 'verification', 'revoked'] } };
+    return { code: 200, body: { service: 'mve-transparency', api: API_VERSION, endpoints: ['elections', 'districts', 'polling-stations', 'results', 'audits', 'incidents', 'verification', 'revoked'] } };
   }
   if (seg[0] !== 'api') return { code: 404, body: { error: 'not found' } };
   const election = loadElection(root);

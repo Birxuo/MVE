@@ -10,9 +10,15 @@
   label { display: block; margin: .5rem 0; }
   input { width: 100%; max-width: 24rem; }
   code { font-size: .8rem; }
+  #contrastToggle { float: right; }
+  body.contrast { background: #000; color: #ff0; font-size: 1.15rem; }
+  body.contrast a { color: #0ff; }
+  body.contrast section { border-color: #ff0; }
+  body.contrast input, body.contrast button { background: #000; color: #ff0; border: 1px solid #ff0; }
 </style>
 </head>
 <body>
+<button id="contrastToggle" type="button">High contrast: off</button>
 <h1>Citizen Services</h1>
 <p><strong>Research prototype.</strong> Check your registration, find your station,
    and verify published results. This page never asks for or shows your vote.</p>
@@ -20,7 +26,7 @@
   <h2>1. Check my registration</h2>
   <label>Reference: <input id="ref" placeholder="registration card reference"></label>
   <button id="lookup">Check</button>
-  <p id="reg"></p>
+  <p id="reg" aria-live="polite"></p>
   <p><small>Use the reference from your registration card — never enter your CIN or any
      personal number. Lookups are rate-limited against enumeration.</small></p>
 </section>
@@ -28,7 +34,7 @@
   <h2>2. Check my polling station's result</h2>
   <label>Station: <input id="station" placeholder="e.g. TANGER-ASilah-0001"></label>
   <button id="check">Check result + audit</button>
-  <p id="res"></p>
+  <p id="res" aria-live="polite"></p>
 </section>
 <section>
   <h2>3. Report an issue</h2>
@@ -36,6 +42,20 @@
      (works for citizens too — choose any category, attach evidence).
      Reports enter review; they never change results by themselves.</p>
 </section>
+<script>
+(function () {
+  var toggle = document.getElementById('contrastToggle');
+  function applyContrast(on) {
+    document.body.classList.toggle('contrast', on);
+    toggle.textContent = 'High contrast: ' + (on ? 'on' : 'off');
+    try { localStorage.setItem('mve-contrast', on ? '1' : '0'); } catch (e) {}
+  }
+  var initial = false;
+  try { initial = localStorage.getItem('mve-contrast') === '1'; } catch (e) {}
+  applyContrast(initial);
+  toggle.onclick = function () { applyContrast(!document.body.classList.contains('contrast')); };
+})();
+</script>
 <script>
 (function () {
   function j(p) { return fetch(p).then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); }); }

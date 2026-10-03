@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { bundleKeys, englishKeys, LOCALES, resolveLocale, t } from '../services/election-core/src/i18n.js';
+import { bundleKeys, englishKeys, LOCALES, localeStatus, resolveLocale, t } from '../services/election-core/src/i18n.js';
 
 describe('i18n: bundle parity', () => {
   it('every locale carries exactly the English key set', () => {
@@ -31,5 +31,10 @@ describe('i18n: fallback and interpolation', () => {
     assert.match(t('ar', 'station.opened', { station: 'S1' }), /S1/);
     assert.match(t('fr', 'vote.spoiled', { msg: 'x' }), /x/);
     assert.notEqual(t('ar', 'station.opened', { station: 'S' }), t('en', 'station.opened', { station: 'S' }));
+  });
+
+  it('flags bundle maturity: zgh provisional, rest stable', () => {
+    assert.equal(localeStatus('zgh'), 'provisional');
+    for (const l of ['en', 'ar', 'fr'] as const) assert.equal(localeStatus(l), 'stable');
   });
 });

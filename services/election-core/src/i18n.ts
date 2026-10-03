@@ -219,3 +219,12 @@ export function bundleKeys(locale: Locale): string[] {
 export function englishKeys(): string[] {
   return Object.keys(en).sort();
 }
+
+/**
+ * Bundle maturity: zgh (Tifinagh) is provisional until native-speaker review
+ * (docs/accessibility/plan.md). Callers surfacing a locale to voters should
+ * show this status alongside it — never present provisional as final.
+ */
+export function localeStatus(locale: Locale): 'stable' | 'provisional' {
+  return locale === 'zgh' ? 'provisional' : 'stable';
+}

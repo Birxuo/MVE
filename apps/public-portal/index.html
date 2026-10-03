@@ -12,18 +12,42 @@
   th, td { border: 1px solid #ccc; padding: .35rem .5rem; text-align: left; font-size: .9rem; }
   .ok { color: #1a7; } .bad { color: #c33; }
   code { font-size: .8rem; }
+  #contrastToggle { float: right; }
+  body.contrast { background: #000; color: #ff0; font-size: 1.15rem; }
+  body.contrast a { color: #0ff; }
+  body.contrast table, body.contrast th, body.contrast td { border-color: #ff0; }
+  body.contrast .bar { background: #333; }
+  body.contrast .bar > div { background: #ff0; }
+  body.contrast .ok { color: #0f0; } body.contrast .bad { color: #f66; }
+  body.contrast button { background: #000; color: #ff0; border: 1px solid #ff0; }
 </style>
 </head>
 <body>
+<button id="contrastToggle" type="button">High contrast: off</button>
 <h1>Morocco Verifiable Elections — Public Transparency</h1>
 <p><strong>Research prototype. Not an official election source.</strong>
    Data: read-only public API (<a href="/api/">/api/</a>). No voter information is published here.</p>
-<h2 id="summary">Loading…</h2>
+<h2 id="summary" aria-live="polite">Loading…</h2>
 <div class="bar"><div id="bar" style="width:0%"></div></div>
 <table>
-  <thead><tr><th>Station</th><th>Counted</th><th>Results</th><th>Hash</th><th>Audit</th></tr></thead>
+  <caption>Per-station published results</caption>
+  <thead><tr><th scope="col">Station</th><th scope="col">Counted</th><th scope="col">Results</th><th scope="col">Hash</th><th scope="col">Audit</th></tr></thead>
   <tbody id="rows"></tbody>
 </table>
+<script>
+(function () {
+  var toggle = document.getElementById('contrastToggle');
+  function applyContrast(on) {
+    document.body.classList.toggle('contrast', on);
+    toggle.textContent = 'High contrast: ' + (on ? 'on' : 'off');
+    try { localStorage.setItem('mve-contrast', on ? '1' : '0'); } catch (e) {}
+  }
+  var initial = false;
+  try { initial = localStorage.getItem('mve-contrast') === '1'; } catch (e) {}
+  applyContrast(initial);
+  toggle.onclick = function () { applyContrast(!document.body.classList.contains('contrast')); };
+})();
+</script>
 <script>
 (function () {
   function j(p) { return fetch(p).then(function (r) { return r.json(); }); }

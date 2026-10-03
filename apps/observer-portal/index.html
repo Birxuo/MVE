@@ -12,17 +12,23 @@
   label { display: block; margin: .5rem 0; }
   textarea { width: 100%; height: 4rem; }
   code { font-size: .8rem; }
+  #contrastToggle { float: right; }
+  body.contrast { background: #000; color: #ff0; font-size: 1.15rem; }
+  body.contrast a { color: #0ff; }
+  body.contrast table, body.contrast th, body.contrast td, body.contrast form { border-color: #ff0; }
+  body.contrast input, body.contrast textarea, body.contrast select, body.contrast button { background: #000; color: #ff0; border: 1px solid #ff0; }
 </style>
 </head>
 <body>
+<button id="contrastToggle" type="button">High contrast: off</button>
 <h1>Observer Portal</h1>
 <p><strong>Accredited observers only (research prototype).</strong>
    Reports enter a review workflow — they never change results.</p>
 <label>Station: <select id="station"></select></label>
 <h2>Event timeline</h2>
-<table><thead><tr><th>#</th><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody id="events"></tbody></table>
+<table><caption>Station audit events</caption><thead><tr><th scope="col">#</th><th scope="col">Time</th><th scope="col">Event</th><th scope="col">Detail</th></tr></thead><tbody id="events"></tbody></table>
 <h2>Incidents</h2>
-<table><thead><tr><th>ID</th><th>Category</th><th>Status</th><th>Time</th></tr></thead><tbody id="incidents"></tbody></table>
+<table><caption>Station incidents</caption><thead><tr><th scope="col">ID</th><th scope="col">Category</th><th scope="col">Status</th><th scope="col">Time</th></tr></thead><tbody id="incidents"></tbody></table>
 <h2>File a report</h2>
 <form id="report">
   <label>Observer ID: <input id="reporter" required maxlength="120"></label>
@@ -37,8 +43,22 @@
   <label>Description: <textarea id="description" required maxlength="2000"></textarea></label>
   <label>Evidence (png/jpg/pdf/txt, ≤1MB total): <input type="file" id="files" multiple></label>
   <button>Submit report</button>
-  <p id="out"></p>
+  <p id="out" aria-live="polite"></p>
 </form>
+<script>
+(function () {
+  var toggle = document.getElementById('contrastToggle');
+  function applyContrast(on) {
+    document.body.classList.toggle('contrast', on);
+    toggle.textContent = 'High contrast: ' + (on ? 'on' : 'off');
+    try { localStorage.setItem('mve-contrast', on ? '1' : '0'); } catch (e) {}
+  }
+  var initial = false;
+  try { initial = localStorage.getItem('mve-contrast') === '1'; } catch (e) {}
+  applyContrast(initial);
+  toggle.onclick = function () { applyContrast(!document.body.classList.contains('contrast')); };
+})();
+</script>
 <script>
 (function () {
   function j(p, opts) { return fetch(p, opts).then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); }); }

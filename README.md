@@ -1017,6 +1017,11 @@ Test (all drilled in code — `tests/`, `research/simulations/`):
 
 Phase 5 — Controlled Pilot
 
+Status: SIMULATION ONLY — no pilot authorized, staffed, or scheduled.
+Gated entry criteria (10 → 50 → 200 stations, shadow rules, promotion rule):
+`docs/elections/tangier-pilot.md`. Gate 0 (simulation) is partial; Gates 1–3
+are fully unmet.
+
 A future pilot could be conducted in a controlled environment, potentially beginning with a limited number of polling stations in Tangier.
 
 The pilot must not be treated as an official election unless and until the appropriate authorities establish a legal framework permitting it.

@@ -56,6 +56,15 @@ describe('observer portal', () => {
     assert.equal((await call('/api/stations/S1/incidents')).status, 200);
   });
 
+  it('serves an accessible report page (captions, contrast, live regions)', async () => {
+    const r = await call('/');
+    assert.equal(r.status, 200);
+    assert.match(r.body, /<caption>/);
+    assert.match(r.body, /scope="col"/);
+    assert.match(r.body, /id="contrastToggle"/);
+    assert.match(r.body, /aria-live="polite"/);
+  });
+
   it('files evidence-backed reports; rejects bad input', async () => {
     const content = Buffer.from('photo-bytes').toString('base64');
     const sha = createHash('sha256').update(Buffer.from('photo-bytes')).digest('hex');

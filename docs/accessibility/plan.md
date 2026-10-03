@@ -19,11 +19,17 @@ all operator prompts are English-only CLI strings — this is a known gap.
 - [x] Externalize station-CLI strings (`services/election-core/src/i18n.ts`:
       `en`/`ar`/`fr`/`zgh`, `--lang` flag + `MVE_LANG` env; `tests/i18n.test.ts`
       enforces key parity). zgh bundle is provisional — native review required.
+- [x] Surface bundle maturity: `localeStatus()` + station-CLI stderr notice on
+      provisional locales (B5); never present provisional as final.
+- [x] Portal screen-reader pass (B5): `<caption>` + `scope="col"` on all data
+      tables, `aria-live="polite"` on dynamic regions, tested per page.
+- [x] High-contrast + large-text theme (B5): persisted toggle on all three
+      static pages (black/yellow, 115% type, localStorage).
 - [ ] Extend bundles to `manage`/`transparency`/`incidents` operator strings.
 - [ ] Voter-facing print: slip + receipt text in the voter's language; receipt
       must stay choice-free in every language (privacy lint extends to bundles).
-- [ ] Non-visual access: audio confirmation of slip contents before deposit;
-      screen-reader-safe result tables; high-contrast/large-text portal theme.
+- [ ] Non-visual access: audio confirmation of slip contents before deposit
+      (theme + table semantics above do not cover this).
 - [ ] Assisted voting: companion procedure where the voter dictates and two
       officers of different affiliations confirm — logged as an assisted session
       with the same reconcile-or-refuse guarantees (`machine.ts` close path).

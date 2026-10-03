@@ -1,7 +1,15 @@
 openapi: 3.0.3
 info:
   title: MVE Transparency API V1
-  version: 0.1.0
+  version: 0.2.0
+  description: >
+    Served at /api/ with X-API-Version: v1 and Cache-Control: no-store.
+    Pagination (?limit=1..1000&offset>=0) returns {total, limit, offset, rows};
+    without params, lists return legacy bare arrays. Lookup is throttled
+    (30/min/IP, 429 + Retry-After). Production operation (TLS, budgets,
+    versioning policy): docs/architecture/portal-operations.md.
+    Changelog 0.1.0 → 0.2.0: pagination envelopes, /api/revoked, revoked flag
+    on audits, /api/lookup contract, version/cache headers.
 paths:
   /api/elections:
     get:

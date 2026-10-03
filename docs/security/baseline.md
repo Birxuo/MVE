@@ -1,4 +1,4 @@
-# Security Baseline (pinned 2026-09-26)
+# Security Baseline (pinned 2026-09-26, self-pass 2026-10-03)
 
 > Re-run after any dependency or toolchain change.
 
@@ -6,13 +6,33 @@
 
 - Node: v24.11.0
 - npm: 11.6.1
-- Deps (runtime): ZERO — `node:crypto`, `node:fs`, `node:path` only.
-- Dev deps: `typescript ^5.6.0`, `@types/node ^22.0.0` (see `package-lock.json`).
+- tsc: 5.9.3 (spec: `typescript ^5.6.0`, `@types/node ^22.0.0`, see `package-lock.json`)
+- Deps (runtime): ZERO — `node:crypto`, `node:fs`, `node:path` only (`npm ls --omit=dev` prints empty).
+- Dev deps: `typescript`, `@types/node` (+ transitive, locked in `package-lock.json`).
+- No `postinstall`/install scripts in `package.json`.
 
-## Audit (2026-09-26)
+## Audit (2026-10-03)
 
 - `npm audit --omit=dev`: 0 vulnerabilities
 - `npm audit` (incl. dev): 0 vulnerabilities
+
+## Self-pass (2026-10-03, A6)
+
+| gate | command | result |
+|---|---|---|
+| typecheck | `npm run typecheck` | clean |
+| build | `npm run build` | clean |
+| tests | `npm test` | 93/93 pass |
+| privacy | `npm run lint:privacy` | OK |
+| audit prod | `npm audit --omit=dev` | 0 vulnerabilities |
+| audit dev | `npm audit` | 0 vulnerabilities |
+| chaos drills | `npm run chaos` | 3/3 detected |
+| barriers | `npm run barriers` | 6/6 detected |
+| scale | 10k stations + paper | 12m31s, verify-paper 10000/10000 MATCH |
+
+Scope honesty: this is a SELF pass by the prototype's authors — static/dynamic
+analysis, pentest, hardware review, and every Phase 6 independent review remain
+open (README roadmap). It gates further prototype work, never a pilot claim.
 
 ## Gates
 
