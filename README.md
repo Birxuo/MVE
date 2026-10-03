@@ -26,7 +26,7 @@ Instead, it explores a **hybrid, verifiable election model** in which digital in
 > **The objective is to reduce the amount of trust required.**
 ---
 # Project Status
-> **RESEARCH / PROTOTYPE — NOT FOR REAL ELECTIONS**
+> **RESEARCH | PROTOTYPE NOT FOR REAL ELECTIONS**
 This repository is an experimental and research project.
 It is **not currently certified, approved, authorized or intended for use in an official Moroccan election**.
 Do not deploy this software for a real election, polling station, voter registration system, political campaign, governmental election infrastructure or other high-stakes electoral process.
