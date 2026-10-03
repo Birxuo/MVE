@@ -8,7 +8,7 @@
 // Enforced by tests/paper.test.ts (data-level separation scan).
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { canonical, participationReceipt, sha256Hex } from '../../../services/election-core/src/crypto-utils.js';
+import { canonical, participationReceipt, receiptFromCommitment, ballotCommitment, randomBlinding, sha256Hex } from '../../../services/election-core/src/crypto-utils.js';
 import {
   DATA_ROOT, ensureDataDirs, loadBallots, loadCa, loadElection, loadEvents, loadResults, loadVoters,
   saveBallots, saveElection, saveEvents, saveResults, saveVoters,
@@ -163,7 +163,7 @@ export function openMachine(root: string, stationId: string, measuredFirmware: s
 /** Cast one ballot: authorize → cast → print slip → (confirm) → deposit. */
 export function castBallot(
   root: string, stationId: string, voterId: string, choiceId: string, confirm = true,
-): { ballotId: string; receipt: string } {
+): { ballotId: string; receipt: string; blinding: string } {
   const s = loadElection(root);
   const st = s.stations.find((x) => x.id === stationId);
   if (!st) throw new Error(`unknown station ${stationId}`);
@@ -178,11 +178,16 @@ export function castBallot(
   if (rec.status === 'VOTED') throw new Error(`double vote blocked for ${voterId}`);
 
   // Transient in-memory bridge: voter → token → ballot. Nothing linking persists.
+  // The blinding is handed to the voter and NEVER stored: the row keeps only
+  // the commitment, so a leaked store cannot turn a receipt code into a lookup.
   const mem = new EligibilityService();
   mem.register({ ...rec });
   const { token } = mem.authorize(voterId);
+  const blinding = randomBlinding();
   const booth = new BallotService(mem);
-  const ballot: Ballot = booth.cast(token, stationId, choiceId, validChoices.size ? validChoices : new Set([choiceId]));
+  const provisional = booth.cast(token, stationId, choiceId, validChoices.size ? validChoices : new Set([choiceId]));
+  const commitment = ballotCommitment(provisional.ballotId, blinding);
+  const ballot: Ballot = { ...provisional, commitment };
 
   if (!confirm) throw new Error('voter rejected the paper slip — ballot spoiled, not deposited');
 
@@ -198,8 +203,30 @@ export function castBallot(
   };
   mkdirSync(paperDir(root, stationId), { recursive: true });
   writeFileSync(join(paperDir(root, stationId), `${ballot.ballotId}.json`), JSON.stringify(slip, null, 2) + '\n');
-  audit(root, 'BALLOT_CAST', stationId, st.deviceId, { ballot: ballot.ballotId }, stationPrivKey(root, stationId));
-  return { ballotId: ballot.ballotId, receipt: participationReceipt(ballot.ballotId) };
+  audit(root, 'BALLOT_CAST', stationId, st.deviceId, { ballot: ballot.ballotId, commitment }, stationPrivKey(root, stationId));
+  return { ballotId: ballot.ballotId, receipt: receiptFromCommitment(commitment), blinding };
+}
+
+/**
+ * Verify a take-home receipt WITHOUT revealing choice: recompute the
+ * commitment from (ballotId, blinding) and require it to match the stored row
+ * (transplant-resistant: the commitment binds this exact ballot). Legacy rows
+ * without a commitment verify via the old deterministic code (needs no
+ * blinding) so pre-A5 receipts keep working.
+ */
+export function verifyParticipationReceipt(
+  root: string, input: { ballotId: string; code: string; blinding?: string },
+): { included: boolean; station?: string } {
+  const row = loadBallots(root).find((b) => b.ballotId === input.ballotId);
+  if (!row) return { included: false };
+  if (row.commitment) {
+    if (!input.blinding) return { included: false };
+    const recomputed = ballotCommitment(row.ballotId, input.blinding);
+    const ok = recomputed === row.commitment && receiptFromCommitment(recomputed) === input.code.toUpperCase();
+    return ok ? { included: true, station: row.stationId } : { included: false };
+  }
+  const ok = participationReceipt(row.ballotId) === input.code.toUpperCase();
+  return ok ? { included: true, station: row.stationId } : { included: false };
 }
 
 /** Close the polls: reconcile paper↔electronic, refuse to sign on mismatch, else sign.

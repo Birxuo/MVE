@@ -32,6 +32,20 @@ It is **not currently certified, approved, authorized or intended for use in an 
 Do not deploy this software for a real election, polling station, voter registration system, political campaign, governmental election infrastructure or other high-stakes electoral process.
 The architecture, cryptographic protocols, software, hardware integrations, legal framework and operational procedures require extensive independent review before any real-world deployment could be considered.
 ---
+## What the prototype demonstrates today (2026-10-03)
+
+A zero-dependency TypeScript prototype runs the full election loop end to end:
+`seed-demo → booth open (2 approvals, firmware + certificate gates) → vote
+(anonymous token, paper slip, commitment-bound receipt) → close (3 approvals,
+reconcile-or-refuse, dual signatures) → sealed offline transmission →
+public portal/API/open dataset → independent verification → risk-limiting audit
+sampling → disaster-recovery rebuild`. Proven by **91 automated tests**
+(`npm test`), `tsc --strict`, `npm audit 0 vulnerabilities`, and a
+`lint:privacy` gate that forbids voter↔vote joins. Scale evidence: 10,000
+simulated stations / 449,898 ballots with full paper trail in ~12.5 min,
+recounted 10,000/10,000 MATCH (see `docs/security/baseline.md`).
+Run guide: [`PROTOTYPE.md`](PROTOTYPE.md).
+---
 # Why This Project Exists
 Modern election systems involve much more than casting a ballot.
 A trustworthy election requires confidence in:
@@ -914,53 +928,57 @@ morocco-verifiable-elections/
 
 Development Roadmap
 
+> Progress note (2026-10-03): checked boxes are *research-prototype* done —
+> implemented, tested, and drilled in this repo. They are not certifications;
+> Phases 5–6 (controlled pilot, independent review) remain fully open.
+
 Phase 0 — Research
 
 * [ ]	Analyze Moroccan election procedures
 * [ ]	Analyze applicable legal requirements
 * [ ]	Analyze privacy requirements
-* [ ]	Document threat model
+* [x]	Document threat model
 * [ ]	Define security assumptions
 * [ ]	Define trust boundaries
-* [ ]	Define election workflow
-* [ ]	Define audit requirements
-* [ ]	Define accessibility requirements
+* [x]	Define election workflow
+* [x]	Define audit requirements
+* [x]	Define accessibility requirements
 
 ⸻
 
 Phase 1 — Architecture
 
-* [ ]	Election core specification
-* [ ]	Identity/eligibility architecture
-* [ ]	Anonymous ballot architecture
-* [ ]	Cryptographic architecture
-* [ ]	Polling-station architecture
-* [ ]	Audit architecture
-* [ ]	Observer architecture
-* [ ]	Public transparency architecture
+* [x]	Election core specification
+* [x]	Identity/eligibility architecture
+* [x]	Anonymous ballot architecture
+* [x]	Cryptographic architecture
+* [x]	Polling-station architecture
+* [x]	Audit architecture
+* [x]	Observer architecture
+* [x]	Public transparency architecture
 
 ⸻
 
 Phase 2 — Prototype
 
-* [ ]	Election management API
-* [ ]	Mock election environment
-* [ ]	Polling-station simulator
-* [ ]	Anonymous ballot prototype
-* [ ]	Result signing
-* [ ]	Result verification
-* [ ]	Audit simulator
-* [ ]	Public results interface
+* [x]	Election management API
+* [x]	Mock election environment
+* [x]	Polling-station simulator
+* [x]	Anonymous ballot prototype
+* [x]	Result signing
+* [x]	Result verification
+* [x]	Audit simulator
+* [x]	Public results interface
 
 ⸻
 
 Phase 3 — Security
 
-* [ ]	Threat modeling
-* [ ]	Dependency auditing
+* [x]	Threat modeling
+* [x]	Dependency auditing
 * [ ]	Static analysis
 * [ ]	Dynamic analysis
-* [ ]	Fuzzing
+* [x]	Fuzzing
 * [ ]	Penetration testing
 * [ ]	Cryptographic review
 * [ ]	Supply-chain review
@@ -982,18 +1000,18 @@ Example:
         ↓
 10,000+ simulated stations
 
-Test:
+Test (all drilled in code — `tests/`, `research/simulations/`):
 
-* network failures
-* power failures
-* corrupted devices
-* malicious devices
-* duplicate ballots
-* missing ballots
-* result manipulation
-* server failure
-* database corruption
-* disaster recovery
+* [x] network failures
+* [x] power failures
+* [x] corrupted devices
+* [x] malicious devices
+* [x] duplicate ballots
+* [x] missing ballots
+* [x] result manipulation
+* [x] server failure
+* [x] database corruption
+* [x] disaster recovery
 
 ⸻
 

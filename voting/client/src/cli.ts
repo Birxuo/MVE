@@ -1,7 +1,7 @@
-// Polling-station CLI — open / vote / close / status.
-// Usage: node dist/voting/client/src/cli.js <open|vote|close|status> [--station X] ...
+// Polling-station CLI — open / vote / close / status / verify-receipt.
+// Usage: node dist/voting/client/src/cli.js <open|vote|close|status|verify-receipt> [--station X] ...
 import { readFileSync } from 'node:fs';
-import { DATA_ROOT, castBallot, closeMachine, openMachine, stationDashboard, type StationDashboard } from './machine.js';
+import { DATA_ROOT, castBallot, closeMachine, openMachine, stationDashboard, verifyParticipationReceipt, type StationDashboard } from './machine.js';
 import { loadElection, loadVoters } from '../../../services/election-core/src/store.js';
 import { resolveLocale, t, type Locale } from '../../../services/election-core/src/i18n.js';
 
@@ -55,11 +55,29 @@ function main(): void {
     }
     const confirm = str(a, 'spoil') ? false : true;
     try {
-      const { ballotId, receipt } = castBallot(root, station, voter, choice, confirm);
-      console.log(t(lang, 'vote.deposited', { id: ballotId, receipt }));
+      const { ballotId, receipt, blinding } = castBallot(root, station, voter, choice, confirm);
+      console.log(t(lang, 'vote.deposited', { id: ballotId, receipt, blinding }));
     } catch (e) {
       console.error(t(lang, 'vote.spoiled', { msg: (e as Error).message }));
       process.exit(4);
+    }
+    return;
+  }
+
+  if (c === 'verify-receipt') {
+    const ballot = str(a, 'ballot');
+    const code = str(a, 'code');
+    const blinding = str(a, 'blinding', '');
+    if (!ballot || !code) {
+      console.error(t(lang, 'usage.verifyReceipt'));
+      process.exit(2);
+    }
+    const v = verifyParticipationReceipt(root, { ballotId: ballot, code, blinding: blinding || undefined });
+    if (v.included) {
+      console.log(t(lang, 'receipt.verified', { code: code.toUpperCase(), station: v.station ?? '' }));
+    } else {
+      console.error(t(lang, 'receipt.failed', { code: code.toUpperCase() }));
+      process.exit(3);
     }
     return;
   }

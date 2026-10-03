@@ -24,14 +24,19 @@ npm run lint:privacy   # no identity in ballot/results/transparency; no vote con
 npm audit              # must stay 0 vulnerabilities
 ```
 
-## Performance reference (2026-09-26, dev machine, Node v24.11.0)
+## Performance reference (2026-10-03, 4 vCPU / 3 GB RAM, Node v24.11.0)
 
-| run | stations × voters | ballots | wall | max RSS |
-|---|---|---|---|---|
-| `simulate` default | 10 × 50 | ~450 | <2s | n/a |
-| `--stations 100 --voters 50` | 100 × 50 | ~4,500 | 0.6s | n/a |
-| `--stations 1000 --voters 50` | 1000 × 50 | ~45,000 | 5.0s | 234 MB |
-| `--stations 10000 --voters 50` | 10000 × 50 | ~450,000 | 4m52s | 1.1 GB |
+| run | stations × voters | ballots | wall | max RSS | verified |
+|---|---|---|---|---|---|
+| `simulate` default | 10 × 50 | ~450 | <2s | n/a | chain ok |
+| `--stations 100 --voters 50` | 100 × 50 | ~4,500 | 0.6s | n/a | chain ok |
+| `--stations 1000 --voters 50` | 1000 × 50 | ~45,000 | 5.0s | 234 MB | chain ok |
+| `--stations 10000 --voters 50` | 10000 × 50 | 449,898 | 10m41s | 1.14 GB | chain ok |
+| `--stations 10000 --voters 50 --paper` | 10000 × 50 | 449,898 ×2 piles | 12m31s | 1.05 GB | `verify-paper --sample auto --ceremony …`: exit 0, 10000/10000 MATCH (100-station ceremony sample) |
+
+(The 2026-09-26 10k row read 4m52s / 1.1 GB on a larger dev machine; the above
+is a fresh re-run on the 3 GB box after the A1–C2 changes, which add per-ballot
+commitments, signed sim events, and per-station device bindings.)
 
 Streaming (`--flush-every 500`, per-station artifact writes) keeps 10k runs
 completing on the dev machine. Peak memory is dominated by full-file

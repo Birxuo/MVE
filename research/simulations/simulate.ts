@@ -4,7 +4,7 @@ import { BallotService } from '../../services/ballot/src/index.js';
 import { generateDeviceKeys, signResult, tally } from '../../services/results/src/index.js';
 import { AuditLog, analyzeTelemetry, reconcile, sampleStations, signEvent, verifyEventChain } from '../../services/audit/src/index.js';
 import { toPublic, toCSV } from '../../services/transparency/src/index.js';
-import { participationReceipt } from '../../services/election-core/src/crypto-utils.js';
+import { ballotCommitment, randomBlinding, receiptFromCommitment } from '../../services/election-core/src/crypto-utils.js';
 import { ensureDataDirs, loadBallots, loadEvents, loadIncidents, loadVoters, saveBallots, saveElection, saveEvents, saveIncidents, saveResults, saveVoters } from '../../services/election-core/src/store.js';
 import { incidentsFromFlags } from '../../services/incidents/src/index.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -110,8 +110,14 @@ for (let s = 0; s < N_STATIONS; s++) {
       const { token } = eligibility.authorize(voterId);
       issued++;
       const choice = CANDIDATES[Math.floor(rand() * CANDIDATES.length)];
-      const b = ballots.cast(token, stationId, choice, validChoices);
-      receipts.push(participationReceipt(b.ballotId));
+      // Commitment-bound receipt: blinding goes home with the voter (discarded
+      // here, as in the booth); only the commitment persists on the row.
+      const blinding = randomBlinding();
+      const provisional = ballots.cast(token, stationId, choice, validChoices);
+      const commitment = ballotCommitment(provisional.ballotId, blinding);
+      provisional.commitment = commitment;
+      const b = provisional;
+      receipts.push(receiptFromCommitment(commitment));
       if (v === 0) audit.append('BALLOT_CAST', stationId, deviceId, { sampleBallot: b.ballotId });
       simVoters.push({ voterId, districtId: 'TANGER-ASILAH', stationId, eligible: true, status: 'VOTED' });
     } else {

@@ -33,7 +33,8 @@ npm run failures                          # 5 failure scenarios (drop/tamper/out
 npm run failures -- --only tamper         # single scenario
 npm run recover                            # DR drill: rebuild aggregate from station copies
 npm run station -- open --station X --approvals presiding,observer
-npm run station -- vote --station X --voter V --choice party_a
+npm run station -- vote --station X --voter V --choice party_a   # prints ballotId + receipt code + blinding (take-home triple)
+npm run station -- verify-receipt --ballot ID --code XXXX-XXXX --blinding R  # choice-free inclusion check (exit 3 if absent)
 npm run station -- close --station X --approvals presiding,deputy,observer [--endorse OFF-1:sig.hex]
 npm run station -- status --station X [--lang ar|zgh|fr|en] [--json]  # §13 dashboard: device/firmware/cert/storage/net/observers/counts
 npm run verify-paper [--station X] [--sample N|auto] [--ceremony HEX]   # paper↔electronic↔published recount (ceremony-bound)

@@ -33,8 +33,18 @@ Verify = recompute hash + `ed25519_verify`.
 ## Ballot privacy
 
 - Eligibility service issues random `token (16 bytes hex)` + marks `voter.status=VOTED`. Token is single-use, no voter link stored in ballot DB.
-- Ballot DB stores `{ballotId, tokenHash: sha256(token), encryptedVote?, choiceId (V1 plaintext in simulator only), stationId, ts}`. V1 simulator uses plaintext `choiceId` + notes that production needs mixnet/homomorphic encryption (deferred).
-- Participation receipt = `sha256(ballotId)` truncated, NOT proof of choice.
+- Ballot DB stores `{ballotId, tokenHash: sha256(token), commitment, stationId, ts, choiceId (V1 plaintext in simulator only)}`. V1 simulator uses plaintext `choiceId` + notes that production needs mixnet/homomorphic encryption (deferred).
+- Participation receipt (commitment-bound): at cast the booth generates a random
+  16-byte `blinding`, stores `commitment = sha256(ballotId:blinding)` on the row
+  (+ `BALLOT_CAST` audit payload), and hands the voter `(ballotId, code, blinding)`
+  where `code` is the first 8 hex of the commitment as `XXXX-XXXX`. The blinding
+  is NEVER persisted. Verification recomputes the commitment and requires an
+  exact row match — so the booth cannot hand out valid codes for dropped ballots,
+  and a leaked store does not turn a code into a ballot lookup (codes are not
+  recomputable from ballotId alone). Legacy pre-commitment rows verify via the
+  old deterministic `sha256("receipt:"+ballotId)` code. Residuals: the booth
+  sees the blinding at issuance (take-home slip channel, not screen, in
+  production); blind-signature issuance is deferred.
 
 ## Audit log chaining
 

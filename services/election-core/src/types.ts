@@ -15,8 +15,9 @@ export interface Officer { id: string; stationId: string; role: 'presiding' | 'd
 // Identity domain — NEVER holds choices (see docs/architecture/database.md)
 export interface Voter { voterId: string; districtId: string; stationId: string; eligible: boolean; status: 'NOT_VOTED' | 'VOTED'; }
 
-// Ballot domain — NO voterId column by design
-export interface Ballot { ballotId: string; tokenHash: string; stationId: string; choiceId: string; ts: string; }
+// Ballot domain — NO voterId column by design. `commitment` binds the voter's
+// take-home receipt without revealing choice (absent = legacy pre-commitment row).
+export interface Ballot { ballotId: string; tokenHash: string; stationId: string; choiceId: string; ts: string; commitment?: string; }
 
 export interface ResultPackage {
   election: string; polling_station: string; device: string;

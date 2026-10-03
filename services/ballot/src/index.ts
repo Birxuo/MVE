@@ -10,7 +10,7 @@ export class BallotService {
 
   constructor(private eligibility: EligibilityService) {}
 
-  cast(token: string, stationId: string, choiceId: string, validChoices: Set<string>): Ballot {
+  cast(token: string, stationId: string, choiceId: string, validChoices: Set<string>, commitment?: string): Ballot {
     if (!validChoices.has(choiceId)) throw new Error(`invalid choice ${choiceId}`);
     const tokenHash = sha256Hex(token);
     if (this.seenTokenHash.has(tokenHash)) throw new Error('duplicate ballot (token reuse)');
@@ -18,6 +18,7 @@ export class BallotService {
     const b: Ballot = {
       ballotId: randomUUID(), tokenHash, stationId, choiceId, ts: new Date().toISOString(),
     };
+    if (commitment) b.commitment = commitment;
     this.seenTokenHash.add(tokenHash);
     this.ballots.push(b);
     return b;

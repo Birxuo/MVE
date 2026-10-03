@@ -44,7 +44,13 @@ npm run simulate -- --stations 3 --voters 10 --seed 7          # populate data/
 npm run recover                # expect RECOVERED, exit 0
 rm data/transparency/results.json && npm run recover           # rebuilds aggregate, exit 0
 rm -rf data/stations/TANGER-ASilah-0002 && npm run recover     # gap detected, exit 1
+npm run recover -- --data national --from /mnt/regional-copy   # 3-copy rebuild from surviving media, exit 0
 ```
+
+Expected stations come from `POLL_CLOSED` audit events (read from `--from`
+when given, else `--data`); each station copy is hash-verified before joining
+the rebuilt aggregate; a `RECOVERY_COMPLETED` receipt is appended to the
+target log. Full matrix in `tests/recover.test.ts`.
 
 Expected stations come from `POLL_CLOSED` audit events; each station copy is
 hash-verified before joining the rebuilt aggregate.

@@ -9,9 +9,10 @@ import { spawnSync } from 'node:child_process';
 import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 import {
   ensureDataDirs, loadBallots, loadElection, loadEvents, loadResults, loadVoters,
-  saveElection, saveResults, saveVoters,
+  saveBallots, saveElection, saveResults, saveVoters,
 } from '../services/election-core/src/store.js';
-import { castBallot, closeMachine, endorsementDigest, openMachine, paperDir } from '../voting/client/src/machine.js';
+import { castBallot, closeMachine, endorsementDigest, openMachine, paperDir, verifyParticipationReceipt } from '../voting/client/src/machine.js';
+import { participationReceipt } from '../services/election-core/src/crypto-utils.js';
 
 const FW = 'sha256:sim-firmware-v1';
 
@@ -218,6 +219,65 @@ describe('paper: officer endorsement (dual control)', () => {
       endorsements: [{ officer: 'OFF-1', signature: sig }],
     });
     assert.equal(pkg.ballots_counted, 1);
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('paper: commitment-bound receipts (choice-free inclusion proof)', () => {
+  it('cast hands (ballotId, code, blinding); code is not the legacy deterministic value', () => {
+    const root = tmp();
+    seed(root, ['V1', 'V2']);
+    openMachine(root, 'S1', FW, ['presiding', 'observer']);
+    const r = castBallot(root, 'S1', 'V1', 'party_a');
+    assert.match(r.receipt, /^[0-9A-F]{4}-[0-9A-F]{4}$/);
+    assert.equal(r.blinding.length, 32);
+    assert.notEqual(r.receipt, participationReceipt(r.ballotId));
+    // Same choice, second voter → different receipt (blinding is per-ballot random).
+    const r2 = castBallot(root, 'S1', 'V2', 'party_a');
+    assert.notEqual(r2.receipt, r.receipt);
+    assert.notEqual(r2.blinding, r.blinding);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('verify round-trips the triple; wrong blinding or unknown ballot fails', () => {
+    const root = tmp();
+    seed(root, ['V1']);
+    openMachine(root, 'S1', FW, ['presiding', 'observer']);
+    const r = castBallot(root, 'S1', 'V1', 'party_b');
+    assert.deepEqual(
+      verifyParticipationReceipt(root, { ballotId: r.ballotId, code: r.receipt, blinding: r.blinding }),
+      { included: true, station: 'S1' },
+    );
+    assert.deepEqual(
+      verifyParticipationReceipt(root, { ballotId: r.ballotId, code: r.receipt, blinding: '00'.repeat(16) }),
+      { included: false },
+    );
+    assert.deepEqual(
+      verifyParticipationReceipt(root, { ballotId: r.ballotId, code: r.receipt }),
+      { included: false },
+    );
+    assert.deepEqual(
+      verifyParticipationReceipt(root, { ballotId: 'nope', code: r.receipt, blinding: r.blinding }),
+      { included: false },
+    );
+    // Blinding never persists: the store holds the commitment, not the secret.
+    const stored = readFileSync(join(root, 'voting', 'ballots.json'), 'utf8');
+    assert.doesNotMatch(stored, new RegExp(r.blinding));
+    assert.match(stored, /"commitment": "[0-9a-f]{64}"/);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('legacy pre-commitment rows still verify via the old deterministic code', () => {
+    const root = tmp();
+    seed(root, ['V1']);
+    openMachine(root, 'S1', FW, ['presiding', 'observer']);
+    const r = castBallot(root, 'S1', 'V1', 'party_a');
+    // Strip the commitment → legacy row.
+    saveBallots(loadBallots(root).map((b) => ({ ...b, commitment: undefined })), root);
+    assert.deepEqual(
+      verifyParticipationReceipt(root, { ballotId: r.ballotId, code: participationReceipt(r.ballotId) }),
+      { included: true, station: 'S1' },
+    );
     rmSync(root, { recursive: true, force: true });
   });
 });

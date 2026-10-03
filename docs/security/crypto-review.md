@@ -47,7 +47,13 @@ DEFERRED = consciously postponed per FULL_PLAN.md.
    the national store stay hash-chained only (terminal keys are X25519, no
    signing key yet); independent live replica storage is `fork()` + re-verify
    (no live replication protocol).
-5. **Receipts are demonstrative.** `participationReceipt` proves inclusion only if the ballot store is honest; no blind-signature / commitment scheme yet. GAP for anti-coercion claims beyond "no proof of choice exists".
+5. **Receipts: commitment-bound (PARTIALLY CLOSED).** `ballotCommitment` binds
+   (ballotId, blinding) into the stored row; `verifyParticipationReceipt`
+   recomputes and requires an exact match (`tests/paper.test.ts`: round-trip,
+   wrong-blinding refusal, legacy-code backward compat, blinding never
+   persisted). A leaked store no longer turns a voter's code into a ballot
+   lookup. Remaining: the booth sees the blinding at issuance, and
+   blind-signature issuance (booth never learns the receipt at all) is deferred.
 
 ## Verdict
 

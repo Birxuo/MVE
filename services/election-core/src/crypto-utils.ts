@@ -18,5 +18,28 @@ export function randomToken(bytes = 16): string {
 
 /** Participation receipt: proves inclusion, NOT choice (anti-coercion). */
 export function participationReceipt(ballotId: string): string {
-  return sha256Hex(`receipt:${ballotId}`).slice(0, 8).toUpperCase().replace(/(.{4})(.{4})/, '$1-$2');
+  return formatReceiptCode(sha256Hex(`receipt:${ballotId}`));
+}
+
+/**
+ * Commitment-bound receipt (A5): the booth commits to C = sha256(ballotId:blinding)
+ * in the ballot row and hands the voter (code, blinding). Anyone holding the
+ * store sees only random-looking C values — unlike the legacy deterministic
+ * code, C is NOT recomputable from ballotId alone, so a leaked store does not
+ * turn a voter's code into a ballot lookup. Choice stays out of every proof.
+ */
+export function randomBlinding(bytes = 16): string {
+  return randomToken(bytes);
+}
+
+export function ballotCommitment(ballotId: string, blinding: string): string {
+  return sha256Hex(`${ballotId}:${blinding}`);
+}
+
+export function receiptFromCommitment(commitment: string): string {
+  return formatReceiptCode(commitment);
+}
+
+function formatReceiptCode(hashHex: string): string {
+  return hashHex.slice(0, 8).toUpperCase().replace(/(.{4})(.{4})/, '$1-$2');
 }
