@@ -34,7 +34,7 @@ The architecture, cryptographic protocols, software, hardware integrations, lega
 ---
 ## What the prototype demonstrates today (2026-10-03)
 
-A zero-dependency TypeScript prototype runs the full election loop end to end:
+#### A zero-dependency TypeScript prototype runs the full election loop end to end:
 `seed-demo → booth open (2 approvals, firmware + certificate gates) → vote
 (anonymous token, paper slip, commitment-bound receipt) → close (3 approvals,
 reconcile-or-refuse, dual signatures) → sealed offline transmission →
